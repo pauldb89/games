@@ -6,10 +6,10 @@ import wandb
 import numpy as np
 import torch
 
-from board_games.ticket2ride.features import DYNAMIC_EXTRACTORS
-from board_games.ticket2ride.features import STATIC_EXTRACTORS
-from board_games.ticket2ride.model import Model
-from board_games.ticket2ride.trainer import PolicyGradientTrainer, Reward
+from games.ticket2ride.features import DYNAMIC_EXTRACTORS
+from games.ticket2ride.features import STATIC_EXTRACTORS
+from games.ticket2ride.model import Model
+from games.ticket2ride.trainer import PolicyGradientTrainer, Reward
 
 
 def main() -> None:

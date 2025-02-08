@@ -1,6 +1,6 @@
 import copy
 import random
-from board_games.ticket2ride.ticket import TICKETS, DrawnTickets, Ticket
+from games.ticket2ride.ticket import TICKETS, DrawnTickets, Ticket
 
 
 class TicketDeck:

@@ -12,14 +12,14 @@ import wandb
 
 from torch.cuda.amp import GradScaler
 
-from board_games.ticket2ride.actions import ActionType, Action, DrawCard
-from board_games.ticket2ride.color import ANY
-from board_games.ticket2ride.environment import BatchRoller
-from board_games.ticket2ride.model import Model, Sample
-from board_games.ticket2ride.policies import UniformRandomPolicy, ArgmaxModelPolicy, StochasticModelPolicy
-from board_games.ticket2ride.state import PlayerScore
-from board_games.ticket2ride.state import Transition
-from board_games.ticket2ride.tracker import Tracker
+from games.ticket2ride.actions import ActionType, Action, DrawCard
+from games.ticket2ride.color import ANY
+from games.ticket2ride.environment import BatchRoller
+from games.ticket2ride.model import Model, Sample
+from games.ticket2ride.policies import UniformRandomPolicy, ArgmaxModelPolicy, StochasticModelPolicy
+from games.ticket2ride.state import PlayerScore
+from games.ticket2ride.state import Transition
+from games.ticket2ride.tracker import Tracker
 
 
 class Reward:

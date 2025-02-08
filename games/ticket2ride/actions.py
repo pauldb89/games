@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from board_games.ticket2ride.card import Card
-from board_games.ticket2ride.route_info import RouteInfo
-from board_games.ticket2ride.ticket import Tickets
+from games.ticket2ride.card import Card
+from games.ticket2ride.route_info import RouteInfo
+from games.ticket2ride.ticket import Tickets
 
 
 class ActionType(StrEnum):

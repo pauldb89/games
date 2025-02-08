@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from board_games.ticket2ride.color import Color
+from games.ticket2ride.color import Color
 
 
 @dataclass(frozen=True, order=True)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from board_games.ticket2ride.city import (
+from games.ticket2ride.city import (
     SALT_LAKE_CITY,
     City,
     ATLANTA,

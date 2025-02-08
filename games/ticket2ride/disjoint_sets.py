@@ -1,4 +1,4 @@
-from board_games.ticket2ride.city import City, CITIES
+from games.ticket2ride.city import City, CITIES
 
 
 class DisjointSets:

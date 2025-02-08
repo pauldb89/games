@@ -3,15 +3,15 @@ import enum
 from dataclasses import dataclass
 from typing import Iterable
 
-from board_games.ticket2ride.city import CITIES
-from board_games.ticket2ride.color import EXTENDED_COLORS
-from board_games.ticket2ride.consts import MAX_PLAYERS
-from board_games.ticket2ride.consts import NUM_ANY_CARDS
-from board_games.ticket2ride.consts import NUM_VISIBLE_CARDS
-from board_games.ticket2ride.actions import ActionType
-from board_games.ticket2ride.route import ROUTES
-from board_games.ticket2ride.state import ObservedState
-from board_games.ticket2ride.ticket import TICKETS, Ticket
+from games.ticket2ride.city import CITIES
+from games.ticket2ride.color import EXTENDED_COLORS
+from games.ticket2ride.consts import MAX_PLAYERS
+from games.ticket2ride.consts import NUM_ANY_CARDS
+from games.ticket2ride.consts import NUM_VISIBLE_CARDS
+from games.ticket2ride.actions import ActionType
+from games.ticket2ride.route import ROUTES
+from games.ticket2ride.state import ObservedState
+from games.ticket2ride.ticket import TICKETS, Ticket
 
 
 class Separator(enum.IntEnum):

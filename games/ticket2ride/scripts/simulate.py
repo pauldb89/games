@@ -4,12 +4,12 @@ from argparse import ArgumentParser
 
 import torch
 
-from board_games.ticket2ride.environment import BatchRoller
-from board_games.ticket2ride.features import DYNAMIC_EXTRACTORS
-from board_games.ticket2ride.model import Model
-from board_games.ticket2ride.policies import KeyboardInputPolicy, ArgmaxModelPolicy, UniformRandomPolicy
-from board_games.ticket2ride.render_utils import print_scorecard, print_board
-from board_games.ticket2ride.tracker import Tracker
+from games.ticket2ride.environment import BatchRoller
+from games.ticket2ride.features import DYNAMIC_EXTRACTORS
+from games.ticket2ride.model import Model
+from games.ticket2ride.policies import KeyboardInputPolicy, ArgmaxModelPolicy, UniformRandomPolicy
+from games.ticket2ride.render_utils import print_scorecard, print_board
+from games.ticket2ride.tracker import Tracker
 
 
 def main() -> None:

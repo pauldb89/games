@@ -4,11 +4,11 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Self
 
-from board_games.ticket2ride.actions import ActionType, Action
-from board_games.ticket2ride.board import Board
-from board_games.ticket2ride.consts import LONGEST_PATH_POINTS
-from board_games.ticket2ride.player import Player
-from board_games.ticket2ride.ticket import DrawnTickets
+from games.ticket2ride.actions import ActionType, Action
+from games.ticket2ride.board import Board
+from games.ticket2ride.consts import LONGEST_PATH_POINTS
+from games.ticket2ride.player import Player
+from games.ticket2ride.ticket import DrawnTickets
 
 
 class ObservedState:

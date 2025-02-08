@@ -1,18 +1,18 @@
 import itertools
 
-from board_games.ticket2ride.actions import ActionType
-from board_games.ticket2ride.actions import BuildRoute
-from board_games.ticket2ride.actions import DrawCard
-from board_games.ticket2ride.actions import DrawTickets
-from board_games.ticket2ride.actions import Plan
-from board_games.ticket2ride.actions import Prediction
-from board_games.ticket2ride.board import Board
-from board_games.ticket2ride.card import Card
-from board_games.ticket2ride.color import ANY, COLORS, EXTENDED_COLORS, Color
-from board_games.ticket2ride.route import ROUTES, Route
-from board_games.ticket2ride.route_info import RouteInfo
-from board_games.ticket2ride.state import ObservedState
-from board_games.ticket2ride.ticket import DrawnTickets, Tickets
+from games.ticket2ride.actions import ActionType
+from games.ticket2ride.actions import BuildRoute
+from games.ticket2ride.actions import DrawCard
+from games.ticket2ride.actions import DrawTickets
+from games.ticket2ride.actions import Plan
+from games.ticket2ride.actions import Prediction
+from games.ticket2ride.board import Board
+from games.ticket2ride.card import Card
+from games.ticket2ride.color import ANY, COLORS, EXTENDED_COLORS, Color
+from games.ticket2ride.route import ROUTES, Route
+from games.ticket2ride.route_info import RouteInfo
+from games.ticket2ride.state import ObservedState
+from games.ticket2ride.ticket import DrawnTickets, Tickets
 
 
 def get_valid_actions(state: ObservedState) -> list[ActionType]:

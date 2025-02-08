@@ -31,7 +31,7 @@ class State:
 def compute_hint(secret: str, guess: str) -> list[int]:
     assert len(secret) == len(guess) == WORD_LENGTH
     hint = []
-    for secret_letter, guessed_letter in zip(secret, guess)
+    for secret_letter, guessed_letter in zip(secret, guess):
         if secret_letter == guessed_letter:
             hint.append(EXACT_MATCH)
         elif guessed_letter in secret:

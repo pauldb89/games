@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from board_games.ticket2ride.color import ANY, Color
-from board_games.ticket2ride.route import ROUTES
+from games.ticket2ride.color import ANY, Color
+from games.ticket2ride.route import ROUTES
 
 
 @dataclass(order=True)

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import random
-from board_games.ticket2ride.card import Card
-from board_games.ticket2ride.color import ANY, COLORS
-from board_games.ticket2ride.consts import NUM_ANY_CARDS, NUM_COLOR_CARDS
+from games.ticket2ride.card import Card
+from games.ticket2ride.color import ANY, COLORS
+from games.ticket2ride.consts import NUM_ANY_CARDS, NUM_COLOR_CARDS
 
 
 @dataclass

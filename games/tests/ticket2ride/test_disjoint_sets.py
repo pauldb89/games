@@ -1,5 +1,5 @@
-from board_games.ticket2ride.disjoint_sets import DisjointSets
-from board_games.ticket2ride.city import SEATTLE, HELENA, LOS_ANGELES, PHOENIX, DENVER
+from games.ticket2ride.disjoint_sets import DisjointSets
+from games.ticket2ride.city import SEATTLE, HELENA, LOS_ANGELES, PHOENIX, DENVER
 
 
 def test_disjoint_sets() -> None:

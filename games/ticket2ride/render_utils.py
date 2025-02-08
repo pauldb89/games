@@ -6,12 +6,12 @@ from tabulate import tabulate
 from termcolor import colored
 from typing import TypeVar
 
-from board_games.ticket2ride.board import Board
-from board_games.ticket2ride.card import render_cards
-from board_games.ticket2ride.longest_path import find_longest_paths
-from board_games.ticket2ride.player import Player
-from board_games.ticket2ride.state import ObservedState, PlayerScore
-from board_games.ticket2ride.ticket import Ticket
+from games.ticket2ride.board import Board
+from games.ticket2ride.card import render_cards
+from games.ticket2ride.longest_path import find_longest_paths
+from games.ticket2ride.player import Player
+from games.ticket2ride.state import ObservedState, PlayerScore
+from games.ticket2ride.ticket import Ticket
 
 
 def render_public_player_stats(board: Board) -> str:

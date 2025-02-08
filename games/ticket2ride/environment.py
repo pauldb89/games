@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from termcolor import colored
 
-from board_games.ticket2ride.action_utils import get_draw_card_options
-from board_games.ticket2ride.actions import (
+from games.ticket2ride.action_utils import get_draw_card_options
+from games.ticket2ride.actions import (
     Action,
     ActionType,
     BuildRoute,
@@ -13,28 +13,28 @@ from board_games.ticket2ride.actions import (
     DrawTickets,
     Plan
 )
-from board_games.ticket2ride.board import Board
-from board_games.ticket2ride.card import Card
-from board_games.ticket2ride.color import ANY, Color, COLORS
-from board_games.ticket2ride.consts import (
+from games.ticket2ride.board import Board
+from games.ticket2ride.card import Card
+from games.ticket2ride.color import ANY, Color, COLORS
+from games.ticket2ride.consts import (
     MAX_PLAYERS,
     MIN_PLAYERS,
     NUM_INITIAL_PLAYER_CARDS,
     NUM_LAST_TURN_CARS, NUM_COLOR_CARDS, NUM_ANY_CARDS,
 )
-from board_games.ticket2ride.longest_path import find_longest_path
-from board_games.ticket2ride.model import Sample
-from board_games.ticket2ride.player import Player
-from board_games.ticket2ride.policies import Policy
-from board_games.ticket2ride.route import ROUTES, Route
-from board_games.ticket2ride.state import (
+from games.ticket2ride.longest_path import find_longest_path
+from games.ticket2ride.model import Sample
+from games.ticket2ride.player import Player
+from games.ticket2ride.policies import Policy
+from games.ticket2ride.route import ROUTES, Route
+from games.ticket2ride.state import (
     ObservedState,
     PlayerScore,
     Score,
     Transition
 )
-from board_games.ticket2ride.ticket import DrawnTickets
-from board_games.ticket2ride.tracker import Tracker
+from games.ticket2ride.ticket import DrawnTickets
+from games.ticket2ride.tracker import Tracker
 
 
 def verify_card_bookkeeping(board: Board, players: list[Player]) -> None:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from board_games.ticket2ride.city import (
+from games.ticket2ride.city import (
     City,
     ATLANTA,
     BOSTON,
@@ -39,7 +39,7 @@ from board_games.ticket2ride.city import (
     WASHINGTON,
     WINNIPEG,
 )
-from board_games.ticket2ride.color import (
+from games.ticket2ride.color import (
     Color,
     ANY,
     BLACK,

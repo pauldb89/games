@@ -1,8 +1,8 @@
 from collections import defaultdict
-from board_games.ticket2ride.color import Color
-from board_games.ticket2ride.disjoint_sets import DisjointSets
-from board_games.ticket2ride.route import Route
-from board_games.ticket2ride.ticket import Ticket, Tickets
+from games.ticket2ride.color import Color
+from games.ticket2ride.disjoint_sets import DisjointSets
+from games.ticket2ride.route import Route
+from games.ticket2ride.ticket import Ticket, Tickets
 
 
 class Player:

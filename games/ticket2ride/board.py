@@ -1,12 +1,12 @@
 import random
 
-from board_games.ticket2ride import consts
-from board_games.ticket2ride.card import Card
-from board_games.ticket2ride.card_deck import CardDeck
-from board_games.ticket2ride.color import ANY
-from board_games.ticket2ride.consts import MAX_VISIBLE_ANY_CARDS, NUM_INITIAL_TRAIN_CARS, NUM_VISIBLE_CARDS
-from board_games.ticket2ride.route_info import RouteInfo
-from board_games.ticket2ride.ticket_deck import TicketDeck
+from games.ticket2ride import consts
+from games.ticket2ride.card import Card
+from games.ticket2ride.card_deck import CardDeck
+from games.ticket2ride.color import ANY
+from games.ticket2ride.consts import MAX_VISIBLE_ANY_CARDS, NUM_INITIAL_TRAIN_CARS, NUM_VISIBLE_CARDS
+from games.ticket2ride.route_info import RouteInfo
+from games.ticket2ride.ticket_deck import TicketDeck
 
 
 class InvalidGameStateError(Exception):

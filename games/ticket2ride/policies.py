@@ -5,15 +5,15 @@ from typing import Protocol
 
 import torch
 
-from board_games.ticket2ride.action_utils import create_build_route_action
-from board_games.ticket2ride.action_utils import create_build_route_mask
-from board_games.ticket2ride.action_utils import create_draw_card_action
-from board_games.ticket2ride.action_utils import create_draw_card_mask
-from board_games.ticket2ride.action_utils import create_draw_tickets_action
-from board_games.ticket2ride.action_utils import create_draw_tickets_mask
-from board_games.ticket2ride.action_utils import create_plan_action
-from board_games.ticket2ride.action_utils import create_valid_actions_mask
-from board_games.ticket2ride.actions import (
+from games.ticket2ride.action_utils import create_build_route_action
+from games.ticket2ride.action_utils import create_build_route_mask
+from games.ticket2ride.action_utils import create_draw_card_action
+from games.ticket2ride.action_utils import create_draw_card_mask
+from games.ticket2ride.action_utils import create_draw_tickets_action
+from games.ticket2ride.action_utils import create_draw_tickets_mask
+from games.ticket2ride.action_utils import create_plan_action
+from games.ticket2ride.action_utils import create_valid_actions_mask
+from games.ticket2ride.actions import (
     Action,
     ActionType,
     BuildRoute,
@@ -21,16 +21,16 @@ from board_games.ticket2ride.actions import (
     DrawTickets,
     Plan,
 )
-from board_games.ticket2ride.action_utils import (
+from games.ticket2ride.action_utils import (
     get_build_route_options,
     get_draw_card_options,
     get_ticket_draw_options,
     get_valid_actions,
 )
-from board_games.ticket2ride.actions import Prediction
-from board_games.ticket2ride.model import Model
-from board_games.ticket2ride.render_utils import print_state, read_option
-from board_games.ticket2ride.state import ObservedState
+from games.ticket2ride.actions import Prediction
+from games.ticket2ride.model import Model
+from games.ticket2ride.render_utils import print_state, read_option
+from games.ticket2ride.state import ObservedState
 
 
 class Policy(Protocol):

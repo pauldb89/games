@@ -6,12 +6,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from board_games.ticket2ride.action_utils import PLAN_CLASSES, DRAW_CARD_CLASSES, \
+from games.ticket2ride.action_utils import PLAN_CLASSES, DRAW_CARD_CLASSES, \
     CHOOSE_TICKETS_CLASSES, BUILD_ROUTE_CLASSES
-from board_games.ticket2ride.actions import ActionType, Action
-from board_games.ticket2ride.features import FEATURE_REGISTRY, FeatureType, \
+from games.ticket2ride.actions import ActionType, Action
+from games.ticket2ride.features import FEATURE_REGISTRY, FeatureType, \
     Extractor, Features, BatchFeatures
-from board_games.ticket2ride.state import ObservedState, Score
+from games.ticket2ride.state import ObservedState, Score
 
 
 @dataclass
