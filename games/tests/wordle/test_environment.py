@@ -4,7 +4,9 @@ from games.wordle.consts import EXACT_MATCH
 from games.wordle.consts import LETTER_MATCH
 from games.wordle.consts import NO_MATCH
 from games.wordle.consts import WORD_LENGTH
-from games.wordle.environment import Action, Environment, compute_hint
+from games.wordle.environment import Environment, compute_hint
+from games.wordle.state import Action
+from games.wordle.vocab import Vocab
 
 
 def test_compute_hint():
@@ -23,12 +25,13 @@ def test_environment():
         [EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH],
     ]
 
-    env = Environment(vocab_path="")
-    state = env.reset(secret="bonus")
+    vocab = Vocab(words=["bonus"])
+    env = Environment(vocab)
+    state = env.reset(seed=0)
     assert state.guesses == []
     assert state.hints == []
     for idx, letter in enumerate(letters):
-        state = env.step(action=Action(letter=letter))
+        state = env.step(action=Action(letter=letter, mask=[]))
 
         guesses = ["".join(guess) for guess in more_itertools.chunked(letters[:idx+1], n=WORD_LENGTH)]
         assert state.guesses == guesses

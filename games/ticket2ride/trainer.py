@@ -190,6 +190,7 @@ class PolicyGradientTrainer:
 
         return player_samples
 
+    @torch.no_grad
     def collect_samples(self, tracker: Tracker, epoch_id: int) -> list[Sample]:
         self.model.eval()
         # envs = []
@@ -293,12 +294,11 @@ class PolicyGradientTrainer:
     def train(self, samples: list[Sample], tracker: Tracker, epoch_id: int) -> None:
         self.model.train()
 
-        self.optimizer.zero_grad()
-
         num_batches = 0
         losses = []
         random.shuffle(samples)
         for start_index in tqdm.tqdm(range(0, len(samples), self.batch_size), desc="Train step"):
+            self.optimizer.zero_grad()
             num_batches += 1
             batch_samples = samples[start_index:start_index + self.batch_size]
 
@@ -330,6 +330,7 @@ class PolicyGradientTrainer:
 
         tracker.log_value("num_batches", num_batches)
 
+    @torch.no_grad
     def evaluate(self, tracker: Tracker, epoch_id: int) -> None:
         self.model.eval()
 
@@ -374,7 +375,9 @@ class PolicyGradientTrainer:
         print(f"Eval metrics at epoch {epoch_id}: {json.dumps(eval_metrics, indent=2, sort_keys=True)}")
 
     def checkpoint(self, epoch_id: int) -> None:
-        torch.save(self.model.state_dict(), os.path.join(self.checkpoint_path, f"model_{epoch_id:05d}.path"))
+        self.model.eval()
+
+        torch.save(self.model.state_dict(), os.path.join(self.checkpoint_path, f"model_{epoch_id:05d}.pth"))
 
     def execute(self) -> None:
         for epoch_id in tqdm.tqdm(range(self.num_epochs), desc="Training progress"):
@@ -388,13 +391,11 @@ class PolicyGradientTrainer:
                 if epoch_id % self.evaluate_every_n_epochs == 0:
                     with tracker.scope("eval"):
                         with tracker.timer("t_overall"):
-                            with torch.no_grad():
-                                self.evaluate(tracker, epoch_id=epoch_id)
+                            self.evaluate(tracker, epoch_id=epoch_id)
 
                 with tracker.scope("collect_samples"):
                     with tracker.timer("t_overall"):
-                        with torch.no_grad():
-                            samples = self.collect_samples(tracker=tracker, epoch_id=epoch_id)
+                        samples = self.collect_samples(tracker=tracker, epoch_id=epoch_id)
 
                 with tracker.scope("train"):
                     with tracker.timer("t_overall"):
@@ -414,7 +415,6 @@ class PolicyGradientTrainer:
 
         with tracker.scope("eval"):
             with tracker.timer("t_overall"):
-                with torch.no_grad():
-                    self.evaluate(tracker, epoch_id=self.num_epochs)
+                self.evaluate(tracker, epoch_id=self.num_epochs)
         metrics = tracker.report()
         wandb.log(metrics, step=self.num_epochs)

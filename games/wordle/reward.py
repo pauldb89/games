@@ -34,7 +34,6 @@ class Reward:
             else:
                 assert hint == EXACT_MATCH
                 reward = self.exact_match_reward
-
             if t.target_state.win:
                 reward += self.win_reward
 

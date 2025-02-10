@@ -5,37 +5,12 @@ from dataclasses import dataclass
 
 from games.wordle.consts import EXACT_MATCH
 from games.wordle.consts import LETTER_MATCH
-from games.wordle.consts import MAX_GUESSES
 from games.wordle.consts import NO_MATCH
 from games.wordle.consts import WORD_LENGTH
+from games.wordle.policy import Policy
+from games.wordle.state import Action, State
+from games.wordle.vocab import Vocab
 
-
-@functools.cache
-def load_vocabulary(path: str) -> list[str]:
-    words = []
-    with open(path, "r") as f:
-        for line in f:
-            words.append(line.strip())
-    return words
-
-
-@dataclass
-class State:
-    guesses: list[str]
-    hints: list[list[int]]
-
-    @property
-    def win(self) -> bool:
-        return self.hints and self.hints[-1] == [EXACT_MATCH] * WORD_LENGTH
-
-    @property
-    def terminal(self) -> bool:
-        return len(self.hints) == MAX_GUESSES or self.win
-
-
-@dataclass(frozen=True)
-class Action:
-    letter: str
 
 
 def compute_hint(secret: str, guess: str) -> list[int]:
@@ -56,17 +31,11 @@ class Environment:
     state: State
     secret: str
 
-    def __init__(self, vocab_path: str) -> None:
-        self.vocab_path = vocab_path
+    def __init__(self, vocab: Vocab) -> None:
+        self.vocab = vocab
 
-    def reset(self, seed: int | None = None, secret: str | None = None) -> State:
-        assert (secret is not None) != (seed is not None), "Exactly one of secret and seed must be specified"
-
-        if secret is not None:
-            self.secret = secret
-        else:
-            self.secret = random.Random(seed).choice(load_vocabulary(self.vocab_path))
-
+    def reset(self, seed: int) -> State:
+        self.secret = random.Random(seed).choice(self.vocab.words)
         self.state = State(guesses=[], hints=[])
         return self.state
 
@@ -88,17 +57,6 @@ class Environment:
         return self.state
 
 
-@dataclass
-class Sample:
-    state: State
-    action: Action
-    reward: float = 0
-
-
-class Policy:
-    def choose_actions(self, states: list[State]) -> list[Action]:
-        return []
-
 
 @dataclass(frozen=True)
 class Transition:
@@ -108,12 +66,12 @@ class Transition:
 
 
 class BatchRoller:
-    def __init__(self, vocab_path: str) -> None:
-        self.vocab_path = vocab_path
+    def __init__(self, vocab: Vocab) -> None:
+        self.vocab = vocab
 
     def run(self, policy: Policy, seeds: list[int]) -> list[list[Transition]]:
         episodes = list(range(len(seeds)))
-        envs = [Environment(self.vocab_path) for _ in episodes]
+        envs = [Environment(vocab=self.vocab) for _ in episodes]
         states = [env.reset(seed) for env, seed in zip(envs, seeds)]
 
         transitions: list[list[Transition]] = [[] for _ in episodes]

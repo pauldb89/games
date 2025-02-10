@@ -6,8 +6,11 @@ import numpy as np
 import torch
 import wandb
 
+from games.wordle.environment import load_vocabulary
+from games.wordle.model import Model
 from games.wordle.reward import Reward
 from games.wordle.trainer import Trainer
+from games.wordle.vocab import Vocab
 
 
 def main() -> None:
@@ -42,6 +45,10 @@ def main() -> None:
     )
     parser.add_argument("--match_reward", type=float, default=0, help="Reward for guessing the correct letter")
     parser.add_argument("--win_reward", type=float, default=100, help="Reward for winning a game")
+    parser.add_argument("--return_discount", type=float, default=0.95, help="Return discount factor (gamma)")
+    parser.add_argument("--dim", type=int, default=512, help="Hidden dimension")
+    parser.add_argument("--layers", type=int, default=6, help="Number of layers")
+    parser.add_argument("--heads", type=int, default=8, help="Number of heads")
     args = parser.parse_args()
 
     wandb.init(project="wordle", name=args.name, dir="/wandb")
@@ -56,7 +63,17 @@ def main() -> None:
     torch.backends.cudnn.benchmark = False  # Can slow down training but ensures consistency
     torch.use_deterministic_algorithms(True)
 
+    model = Model(
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        layers=args.layers, 
+        dim=args.dim, 
+        heads=args.heads,
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+
     trainer = Trainer(
+        model=model,
+        optimizer=optimizer,
         checkpoint_path=os.path.join(args.checkpoint_path, args.name),
         epochs=args.epochs,
         num_episodes_per_epoch=args.num_episodes_per_epoch,
@@ -65,13 +82,14 @@ def main() -> None:
         checkpoint_every_n_epochs=args.checkpoint_every_n_epochs,
         batch_size=args.batch_size,
         lr=args.lr,
-        vocab_path=args.vocab_path,
+        vocab=Vocab(path=args.vocab_path),
         reward_fn=Reward(
             no_match_reward=args.no_match_reward,
             letter_match_reward=args.letter_match_reward,
             exact_match_reward=args.exact_match_reward,
             win_reward=args.win_reward,
-        )
+        ),
+        return_discount=args.return_discount,
     )
     trainer.run()
     wandb.finish()

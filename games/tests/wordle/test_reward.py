@@ -1,19 +1,19 @@
 from games.wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH
-from games.wordle.environment import Action, Environment, Transition
+from games.wordle.environment import Environment, Transition
 from games.wordle.reward import Reward
+from games.wordle.state import Action
+from games.wordle.vocab import Vocab
 
 
 def test_reward() -> None:
-    env = Environment(vocab_path="")
-    env.reset(secret="bonus")
-
     letters = ["r", "a", "i", "s", "e", "s", "o", "u", "l", "s", "b", "o", "n", "u", "s"]
-    env = Environment(vocab_path="")
-    state = env.reset(secret="bonus")
+    vocab = Vocab(words=["bonus"])
+    env = Environment(vocab)
+    state = env.reset(seed=0)
 
     transitions = []
     for letter in letters:
-        action = Action(letter=letter)
+        action = Action(letter=letter, mask=[])
         next_state = env.step(action)
         transitions.append(Transition(source_state=state, target_state=next_state, action=action))
         state = next_state
@@ -22,5 +22,4 @@ def test_reward() -> None:
 
     rewards = reward(transitions)
     expected_rewards = [-2, -2, -2, -1, -2, -1, 0, -1, -2, 0, 0, 0, 0, 0, 100]
-    print(f"{expected_rewards=}")
     assert rewards == expected_rewards
