@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 from torch import nn
 import torch
 
@@ -14,6 +15,23 @@ class Sample:
     long_term_return: float = 0
 
 
+class PositionEncodings(nn.Module):
+    def __init__(self, dim: int, max_length: int = 200) -> None:
+        super().__init__()
+
+        positions = torch.arange(max_length).unsqueeze(dim=1)
+        frequencies = torch.exp(torch.arange(0, dim, 2) * math.log(10_000) / dim)
+
+        embeddings = torch.empty(max_length, dim)
+        embeddings[:, 0::2] = torch.sin(positions / frequencies)
+        embeddings[:, 1::2] = torch.cos(positions / frequencies)
+        # For broadcasting along the batch dimension.
+        self.register_buffer("embeddings", embeddings.unsqueeze(dim=0))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.embeddings[:, :x.size(1), :]
+
+
 class Model(nn.Module):
     def __init__(self, device: torch.device, layers: int, heads: int, dim: int) -> None:
         super().__init__()
@@ -24,6 +42,9 @@ class Model(nn.Module):
 
         self.letter_embeddings = nn.Embedding(26, dim)
         self.hint_embeddings = nn.Embedding(3, dim)
+
+        self.positional_encodings = PositionEncodings(dim=dim)
+
         self.encoder = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
                 d_model=self.dim,
@@ -72,7 +93,8 @@ class Model(nn.Module):
         seqs = self.embed(states)
 
         x, mask = self.pad(seqs)
-        # TODO(pauldb): Add positional encodings.
+
+        x = self.positional_encodings(x)
 
         x = self.encoder(x, src_key_padding_mask=mask)
 
