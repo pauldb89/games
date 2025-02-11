@@ -20,10 +20,18 @@ def compute_hint(secret: str, guess: str) -> list[int]:
     for secret_letter, guessed_letter in zip(secret, guess):
         if secret_letter == guessed_letter:
             hint.append(EXACT_MATCH)
-        elif guessed_letter in secret:
-            hint.append(LETTER_MATCH)
         else:
             hint.append(NO_MATCH)
+
+
+    for secret_letter, guessed_letter in zip(secret, guess):
+        if secret_letter == guessed_letter:
+            continue
+
+        for guess_idx, other_letter in enumerate(guess):
+            if hint[guess_idx] == NO_MATCH and secret_letter == other_letter:
+                hint[guess_idx] = LETTER_MATCH
+                break
 
     return hint
 

@@ -1,3 +1,4 @@
+import numpy as np
 from games.wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH
 from games.wordle.environment import Environment, Transition
 from games.wordle.reward import Reward
@@ -13,7 +14,7 @@ def test_reward() -> None:
 
     transitions = []
     for letter in letters:
-        action = Action(letter=letter, mask=[])
+        action = Action(letter=letter, mask=[], lprobs=np.random.randn(26))
         next_state = env.step(action)
         transitions.append(Transition(source_state=state, target_state=next_state, action=action))
         state = next_state
@@ -21,5 +22,5 @@ def test_reward() -> None:
     reward = Reward(win_reward=100, no_match_reward=-2, letter_match_reward=-1, exact_match_reward=0)
 
     rewards = reward(transitions)
-    expected_rewards = [-2, -2, -2, -1, -2, -1, 0, -1, -2, 0, 0, 0, 0, 0, 100]
+    expected_rewards = [-2, -2, -2, -1, -2, -2, 0, -1, -2, 0, 0, 0, 0, 0, 100]
     assert rewards == expected_rewards

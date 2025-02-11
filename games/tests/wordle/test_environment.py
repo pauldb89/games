@@ -1,5 +1,6 @@
 
 import more_itertools
+import numpy as np
 from games.wordle.consts import EXACT_MATCH
 from games.wordle.consts import LETTER_MATCH
 from games.wordle.consts import NO_MATCH
@@ -20,8 +21,7 @@ def test_environment():
     letters = ["r", "a", "i", "s", "e", "s", "o", "u", "l", "s", "b", "o", "n", "u", "s"]
     hints = [
         [NO_MATCH, NO_MATCH, NO_MATCH, LETTER_MATCH, NO_MATCH],
-        # TODO(pauldb): Make the compute_hint logic more sophisticated to track number of matches.
-        [LETTER_MATCH, EXACT_MATCH, LETTER_MATCH, NO_MATCH, EXACT_MATCH],
+        [NO_MATCH, EXACT_MATCH, LETTER_MATCH, NO_MATCH, EXACT_MATCH],
         [EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH],
     ]
 
@@ -31,7 +31,7 @@ def test_environment():
     assert state.guesses == []
     assert state.hints == []
     for idx, letter in enumerate(letters):
-        state = env.step(action=Action(letter=letter, mask=[]))
+        state = env.step(action=Action(letter=letter, mask=[], lprobs=np.random.randn(26)))
 
         guesses = ["".join(guess) for guess in more_itertools.chunked(letters[:idx+1], n=WORD_LENGTH)]
         assert state.guesses == guesses
