@@ -1,14 +1,13 @@
 import abc
-import functools
 import torch
 from games.wordle.consts import WORD_LENGTH
 from games.wordle.model import Model
 from games.wordle.state import Action, State
-from games.wordle.vocab import get_letter
+from games.wordle.vocab import Vocab, get_letter
 
 
 class Policy(abc.ABC):
-    def __init__(self, model: Model, vocab: list[str]) -> None:
+    def __init__(self, model: Model, vocab: Vocab) -> None:
         self.model = model
         self.vocab = vocab
 
@@ -16,9 +15,12 @@ class Policy(abc.ABC):
         masks = []
         for state in states:
             if not state.guesses or len(state.guesses[-1]) == WORD_LENGTH:
-                masks.append(self.vocab.get_mask(prefix=""))
+                prefix = ""
             else:
-                masks.append(self.vocab.get_mask(state.guesses[-1]))
+                prefix = state.guesses[-1]
+
+            mask = self.vocab.get_mask(prefix=prefix)
+            masks.append(mask)
 
         return masks
 
@@ -26,10 +28,11 @@ class Policy(abc.ABC):
         masks = self.create_masks(states)
         logits = self.model(states, masks)
         letter_ids = self.choose_letter_ids(logits)
+        log_probs = torch.log_softmax(logits, dim=-1).detach().cpu().numpy()
 
         return [
-            Action(letter=get_letter(letter_id), mask=mask) 
-            for letter_id, mask in zip(letter_ids, masks)
+            Action(letter=get_letter(letter_id), mask=mask, lprobs=lprobs) 
+            for letter_id, mask, lprobs in zip(letter_ids, masks, log_probs)
         ]
         
     @abc.abstractmethod
@@ -44,4 +47,4 @@ class SamplingPolicy(Policy):
 
 class ArgmaxPolicy(Policy):
     def choose_letter_ids(self, logits: torch.Tensor) -> list[int]:
-        return torch.argmax(dim=-1).detach().cpu().numpy().tolist()
+        return logits.argmax(dim=-1).detach().cpu().numpy().tolist()

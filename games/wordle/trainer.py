@@ -1,3 +1,4 @@
+import json
 import os
 import random
 from typing import Any
@@ -8,12 +9,13 @@ import torch
 import tqdm
 import wandb
 
-from games.wordle.environment import BatchRoller
-from games.wordle.model import Sample
+from games.wordle.consts import EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
+from games.wordle.environment import BatchRoller, Rollout, Transition
+from games.wordle.model import Sample, amp_context
 from games.wordle.model import Model
 from games.wordle.reward import Reward
 from games.wordle.tracker import Tracker
-from games.wordle.policy import Policy, SamplingPolicy
+from games.wordle.policy import ArgmaxPolicy, SamplingPolicy
 from games.wordle.vocab import Vocab
 
 
@@ -31,6 +33,50 @@ def normalize_returns(samples: list[Sample]) -> list[Sample]:
     for sample in samples:
         sample.long_term_return = (sample.long_term_return - mean) / (std + 1e-8)
     return samples
+
+
+def compute_entropy(rollouts: list[Rollout]) -> float:
+    lprobs = []
+    masks = []
+    for rollout in rollouts:
+        for transition in rollout.transitions:
+            lprobs.append(transition.action.lprobs)
+            masks.append(transition.action.mask)
+
+    lprobs = np.stack(lprobs, axis=0)
+    masks = np.array(masks)
+    masked_lprobs = np.where(masks, lprobs * np.exp(lprobs), 0)
+    return -masked_lprobs.sum(axis=1).mean()
+
+
+def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
+    for rollout in rollouts:
+        end_state = rollout.transitions[-1].target_state
+        tracker.log_value("wins", end_state.win)
+
+        for turn_id, hint in enumerate(end_state.hints, start=1):
+            turn_exact_matches = turn_letter_matches = turn_no_matches = 0
+            for feedback in hint:
+                if feedback == EXACT_MATCH:
+                    turn_exact_matches += 1
+                elif feedback == LETTER_MATCH:
+                    turn_letter_matches += 1
+                else:
+                    turn_no_matches += 1
+
+            tracker.log_value(f"turn_{turn_id}_exact_matches", turn_exact_matches)
+            tracker.log_value(f"turn_{turn_id}_letter_matches", turn_letter_matches)
+            tracker.log_value(f"turn_{turn_id}_no_matches", turn_no_matches)
+
+        tracker.log_value("repeated_guesses", len(end_state.guesses) - len(set(end_state.guesses)))
+
+        if end_state.win:
+            tracker.log_value("turns_to_win", len(end_state.hints))
+            for num_turns in range(1, MAX_GUESSES+1):
+                tracker.log_value(f"wins_in_{num_turns}_turns", len(end_state.hints) == num_turns)
+
+
+    tracker.log_value("entropy", compute_entropy(rollouts))
 
 
 class Trainer:
@@ -74,21 +120,27 @@ class Trainer:
         self.model.eval()
 
         roller = BatchRoller(self.vocab)
-        transitions = roller.run(
+        rollouts = roller.run(
             policy=SamplingPolicy(model=self.model, vocab=self.vocab),
-            seeds=[epoch_id * self.num_episodes_per_epoch + idx for idx in range(self.num_episodes_per_epoch)]
+            seeds=[epoch_id * self.num_episodes_per_epoch + idx for idx in range(self.num_episodes_per_epoch)],
         )
 
+        compute_metrics(rollouts, tracker)
+
         samples = []
-        for episode_transitions in transitions:
-            rewards = self.reward_fn(episode_transitions)
+        for rollout in rollouts:
+            rewards = self.reward_fn(rollout.transitions)
 
             episode_samples = []
-            for transition, reward in zip(episode_transitions, rewards):
+            for transition, reward in zip(rollout.transitions, rewards):
                 episode_samples.append(Sample(state=transition.source_state, action=transition.action, reward=reward))
 
             episode_samples = compute_returns(episode_samples, return_discount=self.return_discount)
             samples.extend(episode_samples)
+
+        for sample in samples:
+            tracker.log_value("reward", sample.reward)
+            tracker.log_value("long_term_return", sample.long_term_return)
 
         return normalize_returns(samples)
 
@@ -104,7 +156,7 @@ class Trainer:
             num_batches += 1
             batch_weight = len(batch_samples) / len(samples)
 
-            with torch.amp.autocast():
+            with amp_context():
                 loss = batch_weight * self.model.loss(batch_samples)
                 assert torch.isnan(loss).sum() == 0
                 tracker.log_value("loss", loss.item())
@@ -123,13 +175,15 @@ class Trainer:
         self.model.eval()
 
         roller = BatchRoller(self.vocab)
-        transitions = roller.run(
-            policy=SamplingPolicy(model=self.model, vocab=self.vocab),
-            seeds=list(range(self.num_episodes_per_epoch))
+        rollouts = roller.run(
+            policy=ArgmaxPolicy(model=self.model, vocab=self.vocab),
+            seeds=[-(idx+1) for idx in range(self.num_eval_episodes_per_epoch)]
         )
 
-        for episode_transitions in transitions:
-            tracker.log_value("wins", episode_transitions[-1].target_state.win)
+        compute_metrics(rollouts, tracker)
+
+        metrics = {k: v for k, v in tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
+        print(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
 
 
     def run(self) -> None:
@@ -156,7 +210,7 @@ class Trainer:
 
             metrics = tracker.report()
             print(
-                f"Epoch: {epoch_id}, Loss: {metrics['train/loss_mean']}, "
+                f"Epoch: {epoch_id}, Loss: {metrics['train/loss_sum']}, "
                 f"Total time: {metrics['t_overall_mean']} seconds"
             )
             wandb.log(metrics, step=epoch_id)

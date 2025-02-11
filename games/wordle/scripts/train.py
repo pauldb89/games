@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import wandb
 
-from games.wordle.environment import load_vocabulary
 from games.wordle.model import Model
 from games.wordle.reward import Reward
 from games.wordle.trainer import Trainer
@@ -23,32 +22,32 @@ def main() -> None:
         help="Checkpoint path",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
-    parser.add_argument("--num_epochs", type=int, default=100, help="Number of epochs")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--num_episodes_per_epoch", type=int, default=10, help="Number of episodes per epoch")
-    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=10, help="Number of episodes per epoch")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs")
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
+    parser.add_argument("--num_episodes_per_epoch", type=int, default=100, help="Number of episodes per epoch")
+    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=100, help="Number of episodes per epoch")
     parser.add_argument("--evaluate_every_n_epochs", type=int, default=5, help="Evaluate every n epochs")
     parser.add_argument("--checkpoint_every_n_epochs", type=int, default=20, help="Policy checkpointing frequency")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument(
         "--vocab_path",
         type=str,
-        default=os.path.expanduser("~/code/ml/games/wordle/vocab_short.txt"),
+        default=os.path.expanduser("~/code/ml/games/wordle/vocab_easy.txt"),
         help="File containing the list of eligible words",
     )
-    parser.add_argument("--no_match_reward", type=float, default=-2, help="Reward for guessing an incorrect letter")
+    parser.add_argument("--no_match_reward", type=float, default=0, help="Reward for guessing an incorrect letter")
     parser.add_argument(
         "--letter_match_reward",
         type=float,
-        default=-1,
+        default=0,
         help="Reward for guessing a correct letter, but incorrect location",
     )
-    parser.add_argument("--match_reward", type=float, default=0, help="Reward for guessing the correct letter")
-    parser.add_argument("--win_reward", type=float, default=100, help="Reward for winning a game")
+    parser.add_argument("--exact_match_reward", type=float, default=0, help="Reward for guessing the correct letter")
+    parser.add_argument("--win_reward", type=float, default=1, help="Reward for winning a game")
     parser.add_argument("--return_discount", type=float, default=0.95, help="Return discount factor (gamma)")
-    parser.add_argument("--dim", type=int, default=512, help="Hidden dimension")
-    parser.add_argument("--layers", type=int, default=6, help="Number of layers")
-    parser.add_argument("--heads", type=int, default=8, help="Number of heads")
+    parser.add_argument("--dim", type=int, default=64, help="Hidden dimension")
+    parser.add_argument("--layers", type=int, default=2, help="Number of layers")
+    parser.add_argument("--heads", type=int, default=1, help="Number of heads")
     args = parser.parse_args()
 
     wandb.init(project="wordle", name=args.name, dir="/wandb")
@@ -71,10 +70,12 @@ def main() -> None:
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
+    checkpoint_path = os.path.join(args.checkpoint_path, args.name)
+    os.makedirs(checkpoint_path, exist_ok=True)
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
-        checkpoint_path=os.path.join(args.checkpoint_path, args.name),
+        checkpoint_path=checkpoint_path,
         epochs=args.epochs,
         num_episodes_per_epoch=args.num_episodes_per_epoch,
         num_eval_episodes_per_epoch=args.num_eval_episodes_per_epoch,

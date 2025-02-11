@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import numpy as np
+
 from games.wordle.consts import EXACT_MATCH, MAX_GUESSES, WORD_LENGTH
 
 
@@ -21,3 +23,4 @@ class State:
 class Action:
     letter: str
     mask: list[int]
+    lprobs: np.ndarray

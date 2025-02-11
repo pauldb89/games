@@ -20,7 +20,6 @@ class Reward:
     def __call__(self, transitions: list[Transition]) -> list[float]:
         rewards = []
         next_hint = None
-        print("number of transitions", len(transitions))
         for t in reversed(transitions):
             if len(t.target_state.hints) == len(t.target_state.guesses):
                  next_hint = t.target_state.hints[-1]
