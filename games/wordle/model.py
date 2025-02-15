@@ -57,7 +57,6 @@ class Model(nn.Module):
         self.hint_embeddings = nn.Embedding(3, config.dim)
 
         self.positional_encodings = PositionEncodings(dim=config.dim)
-        # self.positional_encodings = nn.Parameter(data=torch.randn(1, 200, config.dim) * 0.02)
 
         self.encoder = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
@@ -113,9 +112,6 @@ class Model(nn.Module):
 
         return x, mask
     
-    # def position(self, x: torch.Tensor) -> torch.Tensor:
-    #     return x + self.positional_encodings[:, :x.size(1), :]
-
     def forward(self, states: list[State], head_masks: list[list[int]]) -> torch.Tensor:
         seqs = self.embed(states)
 
