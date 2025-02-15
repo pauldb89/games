@@ -1,16 +1,14 @@
 from argparse import ArgumentParser
-import json
 import os
 import random
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
-from games.wordle.environment import BatchRoller
+from games.wordle.environment import compute_hint
 from games.wordle.model import Model, ModelConfig
-from games.wordle.policy import ArgmaxPolicy
-from games.wordle.tracker import Tracker
-from games.wordle.trainer import compute_metrics
+from games.wordle.state import State
 from games.wordle.vocab import Vocab
 
 
@@ -24,7 +22,6 @@ def main() -> None:
         default=os.path.expanduser("~/code/ml/games/wordle/vocab_easy.txt"),
         help="File containing the list of eligible words",
     )
-    parser.add_argument("--num_episodes", type=int, default=10, help="Number of episodes to evaluate")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -39,27 +36,30 @@ def main() -> None:
     with open(os.path.join(args.checkpoint_dir, "config.json"), "r") as f:
         config = ModelConfig.model_validate_json(f.read())
 
+    vocab = Vocab(args.vocab_path)
     model = Model(device=torch.device("cpu"), config=config)
     model.eval()
+
     model.load_state_dict(torch.load(os.path.join(args.checkpoint_dir, "model.pth"), weights_only=True))
     model.to(torch.device("cuda"))
 
-    vocab = Vocab(args.vocab_path)
-    roller = BatchRoller(vocab=vocab)
-    policy = ArgmaxPolicy(model=model, vocab=vocab)
-    with torch.no_grad():
-        rollouts = roller.run(policy, seeds=list(range(args.num_episodes)))
+    secret = "sport"
+    guesses = ["siren", "upper", "scone", "hairy", "tract"]
+    hints = [compute_hint(secret=secret, guess=guess) for guess in guesses]
+    for idx in range(5):
+        state = State(
+            guesses=guesses + ([secret[:idx]] if idx else []), 
+            hints=hints,
+        )
 
-    torch.set_printoptions(threshold=100, precision=2)
-    for rollout in rollouts:
-        print(f"Secret: {rollout.secret}")
-        end_state = rollout.transitions[-1].target_state
-        print(f"Guesses: {list(zip(end_state.guesses, end_state.hints))}")
-    
-    tracker = Tracker()
-    compute_metrics(rollouts, tracker)
+        logits = model(states=[state], head_masks=vocab.get_mask(secret[:idx]))
+        probs = F.softmax(logits, dim=-1).squeeze().detach().cpu().numpy().tolist()
+        parts = []
+        for idx, prob in enumerate(probs):
+            letter = chr(ord('a') + idx)
+            parts.append(f"{letter}: {prob:.2f}")
 
-    print(json.dumps(tracker.report(), indent=2))
+        print("  ".join(parts))
 
 
 if __name__ == "__main__":

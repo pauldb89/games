@@ -23,4 +23,4 @@ class State:
 class Action:
     letter: str
     mask: list[int]
-    lprobs: np.ndarray
+    lprobs: np.ndarray | None = None

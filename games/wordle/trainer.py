@@ -1,3 +1,4 @@
+import collections
 import json
 import os
 import random
@@ -10,12 +11,12 @@ import tqdm
 import wandb
 
 from games.wordle.consts import EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
-from games.wordle.environment import BatchRoller, Rollout, Transition
+from games.wordle.environment import BatchRoller, ExpansionRoller, Rollout
 from games.wordle.model import Sample, amp_context
 from games.wordle.model import Model
 from games.wordle.reward import Reward
 from games.wordle.tracker import Tracker
-from games.wordle.policy import ArgmaxPolicy, SamplingPolicy
+from games.wordle.policy import ArgmaxPolicy, StochasticPolicy
 from games.wordle.vocab import Vocab
 
 
@@ -40,18 +41,22 @@ def compute_entropy(rollouts: list[Rollout]) -> float:
     masks = []
     for rollout in rollouts:
         for transition in rollout.transitions:
+            assert transition.action.lprobs is not None
             lprobs.append(transition.action.lprobs)
             masks.append(transition.action.mask)
 
     lprobs = np.stack(lprobs, axis=0)
     masks = np.array(masks)
-    masked_lprobs = np.where(masks, lprobs * np.exp(lprobs), 0)
-    return -masked_lprobs.sum(axis=1).mean()
+    masked_lprobs = np.where(masks, lprobs, 0)
+    return -(np.exp(masked_lprobs) * masked_lprobs).sum(axis=1).mean()
 
 
 def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
+    initial_guesses = collections.defaultdict(int)
     for rollout in rollouts:
         end_state = rollout.transitions[-1].target_state
+        initial_guesses[end_state.guesses[0]] += 1
+
         tracker.log_value("wins", end_state.win)
 
         for turn_id, hint in enumerate(end_state.hints, start=1):
@@ -68,14 +73,46 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
             tracker.log_value(f"turn_{turn_id}_letter_matches", turn_letter_matches)
             tracker.log_value(f"turn_{turn_id}_no_matches", turn_no_matches)
 
+        follow_ups = good_follow_ups = 0
+        follow_ups_last_turn = good_follow_ups_last_turn = 0
+        for turn_id in range(1, len(end_state.hints)):
+            prev_hint = end_state.hints[turn_id - 1]
+            hint = end_state.hints[turn_id]
+
+            for feedback in prev_hint:
+                if feedback == EXACT_MATCH:
+                    follow_ups += 1
+                    if turn_id == len(end_state.hints) - 1:
+                        follow_ups_last_turn += 1
+
+            prev_guess = end_state.guesses[turn_id - 1]
+            guess = end_state.guesses[turn_id]
+            if prev_guess == guess:
+                continue
+
+            for prev_feedback, feedback in zip(prev_hint, hint):
+                if prev_feedback == EXACT_MATCH and feedback == EXACT_MATCH:
+                    good_follow_ups += 1
+                    if turn_id == len(end_state.hints) - 1:
+                        good_follow_ups_last_turn += 1
+
+        tracker.log_value("good_follow_up_ratio", good_follow_ups / follow_ups if follow_ups else 0)        
+        tracker.log_value(
+            "good_follow_up_ratio_last_turn", 
+            good_follow_ups_last_turn / follow_ups_last_turn if follow_ups_last_turn else 0
+        )
+
         tracker.log_value("repeated_guesses", len(end_state.guesses) - len(set(end_state.guesses)))
+        if len(end_state.guesses) >= 2:
+            tracker.log_value("repeated_last_guess", end_state.guesses[-1] == end_state.guesses[-2])
 
         if end_state.win:
             tracker.log_value("turns_to_win", len(end_state.hints))
             for num_turns in range(1, MAX_GUESSES+1):
                 tracker.log_value(f"wins_in_{num_turns}_turns", len(end_state.hints) == num_turns)
 
-
+    tracker.log_value("repeated_initial_guesses", len(rollouts) - len(initial_guesses))
+    print(f"{initial_guesses=}")
     tracker.log_value("entropy", compute_entropy(rollouts))
 
 
@@ -95,6 +132,9 @@ class Trainer:
         vocab: Vocab,
         reward_fn: Reward,
         return_discount: float,
+        entropy_loss_weight: float,
+        resume_step: int | None,
+        num_expansions: int | None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -109,19 +149,30 @@ class Trainer:
         self.vocab = vocab
         self.reward_fn = reward_fn
         self.return_discount = return_discount
+        self.entropy_loss_weight = entropy_loss_weight
+        self.resume_step = resume_step
+        self.num_expansions = num_expansions
         self.scaler = torch.GradScaler(init_scale=2**16)
 
     def checkpoint(self, epoch_id: int) -> None:
         self.model.eval()
-        torch.save(self.model.state_dict(), os.path.join(self.checkpoint_path, f"model_{epoch_id:05d}.pth"))
+        checkpoint_dir = os.path.join(self.checkpoint_path, f"{epoch_id:05d}")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        with open(os.path.join(checkpoint_dir, "config.json"), "w") as f:
+            f.write(self.model.config.model_dump_json())
+        torch.save(self.model.state_dict(), os.path.join(checkpoint_dir, "model.pth"))
 
     @torch.no_grad
     def collect_samples(self, tracker: Tracker, epoch_id: int) -> list[Sample]:
         self.model.eval()
 
-        roller = BatchRoller(self.vocab)
+        if self.resume_step and self.num_expansions:
+            roller = ExpansionRoller(self.vocab, self.resume_step, self.num_expansions)
+        else:
+            roller = BatchRoller(self.vocab)
+            
         rollouts = roller.run(
-            policy=SamplingPolicy(model=self.model, vocab=self.vocab),
+            policy=StochasticPolicy(model=self.model, vocab=self.vocab),
             seeds=[epoch_id * self.num_episodes_per_epoch + idx for idx in range(self.num_episodes_per_epoch)],
         )
 
@@ -133,7 +184,11 @@ class Trainer:
 
             episode_samples = []
             for transition, reward in zip(rollout.transitions, rewards):
-                episode_samples.append(Sample(state=transition.source_state, action=transition.action, reward=reward))
+                episode_samples.append(
+                    Sample(
+                        state=transition.source_state, action=transition.action, reward=reward, secret=rollout.secret
+                    )
+                )
 
             episode_samples = compute_returns(episode_samples, return_discount=self.return_discount)
             samples.extend(episode_samples)
@@ -147,7 +202,7 @@ class Trainer:
         
     def train(self, samples: list[Any], tracker: Tracker) -> None:
         self.model.train()
-        random.shuffle(samples)
+        # random.shuffle(samples)
 
         num_batches = 0
         for batch_samples in tqdm.tqdm(more_itertools.chunked(samples, self.batch_size), desc="Train step"):
@@ -157,7 +212,15 @@ class Trainer:
             batch_weight = len(batch_samples) / len(samples)
 
             with amp_context():
-                loss = batch_weight * self.model.loss(batch_samples)
+                policy_loss, entropy_loss = self.model.loss(batch_samples)
+
+                policy_loss *= batch_weight
+                entropy_loss *= batch_weight
+
+                tracker.log_value("policy_loss", policy_loss.item())
+                tracker.log_value("entropy_loss", entropy_loss.item())
+
+                loss = policy_loss + self.entropy_loss_weight * entropy_loss                
                 assert torch.isnan(loss).sum() == 0
                 tracker.log_value("loss", loss.item())
 
@@ -173,7 +236,8 @@ class Trainer:
     @torch.no_grad
     def evaluate(self, tracker: Tracker, epoch_id: int) -> None:
         self.model.eval()
-
+        
+        # with tracker.scope("argmax"):
         roller = BatchRoller(self.vocab)
         rollouts = roller.run(
             policy=ArgmaxPolicy(model=self.model, vocab=self.vocab),
@@ -181,6 +245,27 @@ class Trainer:
         )
 
         compute_metrics(rollouts, tracker)
+
+            # print("Argmax rollouts")
+            # for rollout in rollouts[:5]:
+            #     print(f"Secret: {rollout.secret}")
+            #     end_state = rollout.transitions[-1].target_state
+            #     print(f"Guesses: {list(zip(end_state.guesses, end_state.hints))}")
+
+        # with tracker.scope("stochastic"):
+        #     roller = BatchRoller(self.vocab)
+        #     rollouts = roller.run(
+        #         policy=StochasticPolicy(model=self.model, vocab=self.vocab),
+        #         seeds=[-(idx+1) for idx in range(self.num_eval_episodes_per_epoch)]
+        #     )
+
+        #     compute_metrics(rollouts, tracker)
+
+        #     print("Stochastic rollouts")
+        #     for rollout in rollouts[:5]:
+        #         print(f"Secret: {rollout.secret}")
+        #         end_state = rollout.transitions[-1].target_state
+        #         print(f"Guesses: {list(zip(end_state.guesses, end_state.hints))}")
 
         metrics = {k: v for k, v in tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
         print(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")

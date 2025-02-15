@@ -7,6 +7,11 @@ from games.wordle.vocab import Vocab, get_letter
 
 
 class Policy(abc.ABC):
+    def choose_actions(self, states: list[State]) -> list[Action]:
+        ...
+
+
+class ModelPolicy(Policy):
     def __init__(self, model: Model, vocab: Vocab) -> None:
         self.model = model
         self.vocab = vocab
@@ -40,11 +45,11 @@ class Policy(abc.ABC):
         ...
         
 
-class SamplingPolicy(Policy):
+class StochasticPolicy(ModelPolicy):
     def choose_letter_ids(self, logits: torch.Tensor) -> list[int]:
         return torch.distributions.Categorical(logits=logits).sample().detach().cpu().numpy().tolist()
 
 
-class ArgmaxPolicy(Policy):
+class ArgmaxPolicy(ModelPolicy):
     def choose_letter_ids(self, logits: torch.Tensor) -> list[int]:
         return logits.argmax(dim=-1).detach().cpu().numpy().tolist()

@@ -8,7 +8,7 @@ def get_letter(letter_id: int) -> str:
 
 
 class Vocab:
-    def __init__(self, path: str | None = None, words: list[str] | None = None, ) -> None:
+    def __init__(self, path: str | None = None, words: list[str] | None = None, skip_mask: bool = False) -> None:
         assert (words is None) != (path is None), "Exactly one of path or words must be defined"
 
         if words is not None:
@@ -18,7 +18,7 @@ class Vocab:
             with open(path, "r") as f:
                 for line in f:
                     self.words.append(line.strip())
-
+        self.skip_mask = skip_mask
         self.mask_cache = {}
 
     def build_mask(self, prefix: str) -> list[int]:
@@ -30,6 +30,9 @@ class Vocab:
 
 
     def get_mask(self, prefix: str) -> list[int]:
+        if self.skip_mask:
+            return [True] * 26
+
         if mask := self.mask_cache.get(prefix):
             return mask
 

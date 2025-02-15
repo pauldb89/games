@@ -24,7 +24,7 @@ class Reward:
             if len(t.target_state.hints) == len(t.target_state.guesses):
                  next_hint = t.target_state.hints[-1]
 
-            assert next_hint is not None
+            assert next_hint is not None, transitions
             hint = next_hint[len(t.target_state.guesses[-1]) - 1]
             if hint == NO_MATCH:
                 reward = self.no_match_reward
