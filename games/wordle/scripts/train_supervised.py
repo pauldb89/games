@@ -57,14 +57,31 @@ def generate_samples(vocab: Vocab, tracker: Tracker) -> list[Sample]:
     tracker.log_value(f"candidates_at_length_{prefix_length}", len(candidates))
 
     next_guess = random.choice(candidates)
+    guesses.append(next_guess)
+    hints.append(compute_hint(secret, next_guess))
+
     samples = []
-    for idx, letter in enumerate(next_guess):
-        samples.append(
-            Sample(
-                state=State(guesses=guesses + ([next_guess[:idx]] if idx > 0 else []), hints=hints),
-                action=Action(letter=letter, mask=vocab.get_mask(next_guess[:idx]), lprobs=None),
-            )
-        )
+    for idx, (guess, hint) in enumerate(zip(guesses, hints)):
+        for letter_idx, feedback in enumerate(hint):
+            if feedback != EXACT_MATCH:
+                continue
+
+            for other_idx in range(0, idx):
+                if guesses[other_idx][letter_idx] == guess[letter_idx]:
+                    samples.append(
+                        Sample(
+                            state=State(
+                                guesses=guesses[:idx] + ([guess[:letter_idx]] if letter_idx > 0 else []), 
+                                hints=hints[:idx],
+                            ),
+                            action=Action(
+                                letter=guess[letter_idx], 
+                                mask=vocab.get_mask(guess[:letter_idx]),
+                                lprobs=None,
+                            ),
+                        )
+                    )
+                    break
 
     return samples
 
@@ -113,10 +130,10 @@ def main() -> None:
     parser.add_argument("--checkpoint_every_n_steps", type=int, default=1000, help="Policy checkpointing frequency")
     parser.add_argument("--num_eval_episodes_per_step", type=int, default=100, help="Number of samples to evaluate on")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--dim", type=int, default=64, help="Hidden dimension")
-    parser.add_argument("--layers", type=int, default=2, help="Number of layers")
-    parser.add_argument("--heads", type=int, default=1, help="Number of heads")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--dim", type=int, default=128, help="Hidden dimension")
+    parser.add_argument("--layers", type=int, default=4, help="Number of layers")
+    parser.add_argument("--heads", type=int, default=2, help="Number of heads")
     args = parser.parse_args()
 
     wandb.init(project="wordle", name=args.name, dir="/wandb")
