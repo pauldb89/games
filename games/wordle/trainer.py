@@ -112,7 +112,6 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
                 tracker.log_value(f"wins_in_{num_turns}_turns", len(end_state.hints) == num_turns)
 
     tracker.log_value("repeated_initial_guesses", len(rollouts) - len(initial_guesses))
-    print(f"{initial_guesses=}")
     tracker.log_value("entropy", compute_entropy(rollouts))
 
 
@@ -127,7 +126,7 @@ class Trainer:
         num_eval_episodes_per_epoch: int,
         evaluate_every_n_epochs: int,
         checkpoint_every_n_epochs: int,
-        batch_size: int,
+        updates_per_batch: int,
         lr: float,
         vocab: Vocab,
         reward_fn: Reward,
@@ -144,7 +143,7 @@ class Trainer:
         self.num_eval_episodes_per_epoch = num_eval_episodes_per_epoch
         self.evaluate_every_n_epochs = evaluate_every_n_epochs
         self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
-        self.batch_size = batch_size
+        self.updates_per_batch = updates_per_batch
         self.lr = lr
         self.vocab = vocab
         self.reward_fn = reward_fn
@@ -177,6 +176,9 @@ class Trainer:
         )
 
         compute_metrics(rollouts, tracker)
+        for r in rollouts:
+            end_state = r.transitions[-1].target_state
+            print(f"Secret: {r.secret}, guesses: {end_state.guesses}, hints: {end_state.hints}")
 
         samples = []
         for rollout in rollouts:
@@ -202,15 +204,16 @@ class Trainer:
         
     def train(self, samples: list[Any], tracker: Tracker) -> None:
         self.model.train()
-        # random.shuffle(samples)
+        random.shuffle(samples)
 
         num_batches = 0
-        for batch_samples in tqdm.tqdm(more_itertools.chunked(samples, self.batch_size), desc="Train step"):
-            self.optimizer.zero_grad()
-
+        for batch_samples in tqdm.tqdm(more_itertools.divide(self.updates_per_batch, samples), desc="Train step"):
+            batch_samples = list(batch_samples)
             num_batches += 1
             batch_weight = len(batch_samples) / len(samples)
 
+            self.optimizer.zero_grad()
+            
             with amp_context():
                 policy_loss, entropy_loss = self.model.loss(batch_samples)
 
@@ -225,7 +228,6 @@ class Trainer:
                 tracker.log_value("loss", loss.item())
 
                 loss = self.scaler.scale(loss)
-
                 loss.backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()

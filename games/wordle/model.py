@@ -43,7 +43,6 @@ class ModelConfig(BaseModel):
     layers: int
     heads: int
     dim: int
-    share_weights: bool = False
 
 
 class Model(nn.Module):
@@ -72,8 +71,6 @@ class Model(nn.Module):
             nn.LayerNorm(config.dim),
             nn.Linear(config.dim, 26, bias=False)
         )
-        if config.share_weights:
-            self.head[1].weight = self.letter_embeddings.weight
 
         self.to(device)
 
@@ -150,16 +147,24 @@ class Model(nn.Module):
         # entropy_loss is -entropy, since we want to maximize it.
         entropy_loss = (masked_log_probs * torch.exp(masked_log_probs)).sum(dim=1).mean()
         return policy_loss, entropy_loss
+        # targets = torch.tensor(targets, device=self.device)
+        # weights = torch.tensor(weights, device=self.device)
+        # losses = F.cross_entropy(logits, targets, reduction="none")
+        # return (losses * weights).mean(), torch.tensor(0.0)        
 
     def supervised_loss(self, samples: list[Sample]) -> torch.Tensor:
         states = []
         masks = []
         targets = []
+        weights = []
         for sample in samples:
             states.append(sample.state)
             masks.append(sample.action.mask)
             targets.append(letter_index(sample.action.letter))
+            weights.append(sample.reward)
 
         logits = self(states, masks)
         targets = torch.tensor(targets, device=self.device)
-        return F.cross_entropy(logits, targets)
+        weights = torch.tensor(weights, device=self.device)
+        losses = F.cross_entropy(logits, targets, reduction="none")
+        return (losses * weights).mean()

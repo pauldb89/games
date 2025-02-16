@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from dataclasses import dataclass
 import os
 import random
 
@@ -10,6 +11,12 @@ from games.wordle.environment import compute_hint
 from games.wordle.model import Model, ModelConfig
 from games.wordle.state import State
 from games.wordle.vocab import Vocab
+
+
+@dataclass
+class Scenario:
+    secret: str
+    guesses: list[str]
 
 
 def main() -> None:
@@ -43,23 +50,29 @@ def main() -> None:
     model.load_state_dict(torch.load(os.path.join(args.checkpoint_dir, "model.pth"), weights_only=True))
     model.to(torch.device("cuda"))
 
-    secret = "sport"
-    guesses = ["siren", "upper", "scone", "hairy", "tract"]
-    hints = [compute_hint(secret=secret, guess=guess) for guess in guesses]
-    for idx in range(5):
-        state = State(
-            guesses=guesses + ([secret[:idx]] if idx else []), 
-            hints=hints,
-        )
+    scenarios = [
+        Scenario(secret="sport", guesses=["siren", "upper", "scone", "hairy", "tract"]),
+        Scenario(secret="crook", guesses=["pluck", "raise"]),
+        Scenario(secret="quill", guesses=["parse"]),
+    ]
 
-        logits = model(states=[state], head_masks=vocab.get_mask(secret[:idx]))
-        probs = F.softmax(logits, dim=-1).squeeze().detach().cpu().numpy().tolist()
-        parts = []
-        for idx, prob in enumerate(probs):
-            letter = chr(ord('a') + idx)
-            parts.append(f"{letter}: {prob:.2f}")
+    for idx, scenario in enumerate(scenarios):
+        print(f"Scenario {idx}: {scenario}")
+        hints = [compute_hint(secret=scenario.secret, guess=guess) for guess in scenario.guesses]
+        for idx in range(5):
+            state = State(
+                guesses=scenario.guesses + ([scenario.secret[:idx]] if idx else []), 
+                hints=hints,
+            )
 
-        print("  ".join(parts))
+            logits = model(states=[state], head_masks=vocab.get_mask(scenario.secret[:idx]))
+            probs = F.softmax(logits, dim=-1).squeeze().detach().cpu().numpy().tolist()
+            parts = []
+            for idx, prob in enumerate(probs):
+                letter = chr(ord('a') + idx)
+                parts.append(f"{letter}: {prob:.2f}")
+
+            print("  ".join(parts))
 
 
 if __name__ == "__main__":

@@ -45,8 +45,8 @@ class Environment:
     def __init__(self, vocab: Vocab) -> None:
         self.vocab = vocab
 
-    def reset(self, seed: int, state: State | None = None) -> State:
-        self.secret = random.Random(seed).choice(self.vocab.words)
+    def reset(self, seed: int | None = None, secret: str | None = None, state: State | None = None) -> State:
+        self.secret = secret or random.Random(seed).choice(self.vocab.words)
         self.state = copy.deepcopy(state) if state is not None else State(guesses=[], hints=[])
         return self.state
 
