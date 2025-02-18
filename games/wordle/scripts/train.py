@@ -9,7 +9,7 @@ import wandb
 from games.wordle.model import Model, ModelConfig
 from games.wordle.reward import Reward
 from games.wordle.trainer import Trainer
-from games.wordle.vocab import Vocab
+from games.wordle.vocab import Vocab, load_words
 
 
 def main() -> None:
@@ -35,6 +35,7 @@ def main() -> None:
         default=os.path.expanduser("~/code/ml/games/wordle/vocab_easy.txt"),
         help="File containing the list of eligible words",
     )
+    parser.add_argument("--max_secret_options", type=int, default=None, help="Limit the number of secret options")
     parser.add_argument("--no_match_reward", type=float, default=0, help="Reward for guessing an incorrect letter")
     parser.add_argument(
         "--letter_match_reward",
@@ -50,8 +51,6 @@ def main() -> None:
     parser.add_argument("--layers", type=int, default=4, help="Number of layers")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads")
     parser.add_argument("--skip_mask", default=False, action="store_true", help="Whether to skip masking when sampling")
-    parser.add_argument("--resume_step", type=int, default=None, help="Resume step for multi-trajectory rollouts")
-    parser.add_argument("--num_expansions", type=int, default=None, help="Number of expansions to resume")
     args = parser.parse_args()
 
     wandb.init(project="wordle", name=args.name, dir="/wandb")
@@ -66,13 +65,9 @@ def main() -> None:
     torch.backends.cudnn.benchmark = False  # Can slow down training but ensures consistency
     torch.use_deterministic_algorithms(True)
 
-    model_config = ModelConfig(
-        layers=args.layers, 
-        dim=args.dim, 
-        heads=args.heads,
-    )
+    model_config = ModelConfig(layers=args.layers, dim=args.dim, heads=args.heads)
     model = Model(device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), config=model_config)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     checkpoint_path = os.path.join(args.checkpoint_path, args.name)
     os.makedirs(checkpoint_path, exist_ok=True)
@@ -87,7 +82,11 @@ def main() -> None:
         checkpoint_every_n_epochs=args.checkpoint_every_n_epochs,
         updates_per_batch=args.updates_per_batch,
         lr=args.lr,
-        vocab=Vocab(path=args.vocab_path, skip_mask=args.skip_mask),
+        vocab=Vocab(
+            words=load_words(args.vocab_path), 
+            max_secret_options=args.max_secret_options, 
+            skip_mask=args.skip_mask,
+        ),
         reward_fn=Reward(
             no_match_reward=args.no_match_reward,
             letter_match_reward=args.letter_match_reward,
@@ -96,8 +95,6 @@ def main() -> None:
         ),
         return_discount=args.return_discount,
         entropy_loss_weight=args.entropy_loss_weight,
-        resume_step=args.resume_step,
-        num_expansions=args.num_expansions,
     )
     trainer.run()
     wandb.finish()

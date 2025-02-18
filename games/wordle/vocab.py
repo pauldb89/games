@@ -1,3 +1,16 @@
+import random
+
+
+def load_words(path: str) -> list[str]:
+    words = []
+    with open(path, "r") as f:
+        for line in f:
+            words.append(line.strip())
+    random.shuffle(words)    
+    return words
+
+
+
 def letter_index(letter: str) -> int:
     return ord(letter) - ord('a')
 
@@ -8,18 +21,14 @@ def get_letter(letter_id: int) -> str:
 
 
 class Vocab:
-    def __init__(self, path: str | None = None, words: list[str] | None = None, skip_mask: bool = False) -> None:
-        assert (words is None) != (path is None), "Exactly one of path or words must be defined"
-
-        if words is not None:
-            self.words = words
-        else:
-            self.words = []
-            with open(path, "r") as f:
-                for line in f:
-                    self.words.append(line.strip())
+    def __init__(self, words: list[str], max_secret_options: int | None, skip_mask: bool = False) -> None:
+        self.words = words
+        self.max_secret_options = max_secret_options
         self.skip_mask = skip_mask
         self.mask_cache = {}
+
+    def pick_secret(self, seed: int) -> str:
+        return random.Random(seed).choice(self.words[:self.max_secret_options])
 
     def build_mask(self, prefix: str) -> list[int]:
         mask = [False] * 26

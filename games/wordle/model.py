@@ -1,3 +1,4 @@
+import contextlib
 from dataclasses import dataclass
 import math
 from pydantic import BaseModel
@@ -5,11 +6,15 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 
+from games.wordle.consts import AMP_ENABLED
 from games.wordle.state import Action, State
 from games.wordle.vocab import letter_index
 
 
 def amp_context():
+    if not AMP_ENABLED:
+        return contextlib.nullcontext()
+
     return torch.amp.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu")
 
 

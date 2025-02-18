@@ -42,15 +42,19 @@ class Environment:
     state: State
     secret: str
 
-    def __init__(self, vocab: Vocab) -> None:
-        self.vocab = vocab
+    def __init__(self) -> None:
+        self.secret = ""
+        self.state = State(guesses=[], hints=[])
 
-    def reset(self, seed: int | None = None, secret: str | None = None, state: State | None = None) -> State:
-        self.secret = secret or random.Random(seed).choice(self.vocab.words)
+    def reset(self, secret: str, state: State | None = None) -> State:
+        self.secret = secret
         self.state = copy.deepcopy(state) if state is not None else State(guesses=[], hints=[])
         return self.state
 
     def step(self, action: Action) -> State:
+        assert not self.state.terminal, "Cannot step from a terminal state, reset the environment"
+        assert self.secret, "Must reset the environment before stepping"
+
         state = copy.deepcopy(self.state)
 
         if not state.guesses or len(state.guesses[-1]) == WORD_LENGTH:
@@ -108,8 +112,8 @@ class BatchRoller(Roller):
 
     def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]:
         episodes = list(range(len(seeds)))
-        envs = [Environment(vocab=self.vocab) for _ in episodes]
-        states = [env.reset(seed) for env, seed in zip(envs, seeds)]
+        envs = [Environment() for _ in episodes]
+        states = [env.reset(secret=self.vocab.pick_secret(seed)) for env, seed in zip(envs, seeds)]
 
         transitions: list[list[Transition]] = [[] for _ in episodes]
         while episodes:
@@ -132,58 +136,58 @@ class BatchRoller(Roller):
         return rollouts
 
 
-class ExpansionRoller(Roller):
-    def __init__(self, vocab: Vocab, resume_step: int, num_expansions: int) -> None:
-        self.vocab = vocab
-        self.resume_step = resume_step
-        self.num_expansions = num_expansions
+# class ExpansionRoller(Roller):
+#     def __init__(self, vocab: Vocab, resume_step: int, num_expansions: int) -> None:
+#         self.vocab = vocab
+#         self.resume_step = resume_step
+#         self.num_expansions = num_expansions
 
-    def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]:
-        roller = BatchRoller(vocab=self.vocab)
-        initial_rollouts = roller.run(policy, seeds)
+#     def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]:
+#         roller = BatchRoller(vocab=self.vocab)
+#         initial_rollouts = roller.run(policy, seeds)
 
-        filtered_rollouts = [r for r in initial_rollouts if len(r.transitions) > self.resume_step + 1]
-        print(f"Kept {100 * len(filtered_rollouts) / len(initial_rollouts):.2f}% of initial rollouts")
+#         filtered_rollouts = [r for r in initial_rollouts if len(r.transitions) > self.resume_step + 1]
+#         print(f"Kept {100 * len(filtered_rollouts) / len(initial_rollouts):.2f}% of initial rollouts")
 
-        envs = []
-        states = []
-        for rollout in filtered_rollouts:
-            for _ in range(self.num_expansions):
-                env = Environment(vocab=Vocab(words=[rollout.secret]))
-                state = rollout.transitions[self.resume_step].target_state
-                states.append(state)
+#         envs = []
+#         states = []
+#         for rollout in filtered_rollouts:
+#             for _ in range(self.num_expansions):
+#                 env = Environment(vocab=Vocab(words=[rollout.secret]))
+#                 state = rollout.transitions[self.resume_step].target_state
+#                 states.append(state)
 
-                env.reset(seed=0, state=state)
-                envs.append(env)
+#                 env.reset(seed=0, state=state)
+#                 envs.append(env)
 
-        episodes = list(range(len(envs)))
-        transitions: list[list[Transition]] = [[] for _ in episodes]
+#         episodes = list(range(len(envs)))
+#         transitions: list[list[Transition]] = [[] for _ in episodes]
 
-        while episodes:
-            with amp_context():
-                actions = policy.choose_actions([states[episode_id] for episode_id in episodes])
+#         while episodes:
+#             with amp_context():
+#                 actions = policy.choose_actions([states[episode_id] for episode_id in episodes])
 
-            active_episodes = []
-            for episode_id, action in zip(episodes, actions):
-                next_state = envs[episode_id].step(action)
-                transitions[episode_id].append(Transition(states[episode_id], next_state, action))
-                states[episode_id] = next_state
-                if not next_state.terminal:
-                    active_episodes.append(episode_id)
+#             active_episodes = []
+#             for episode_id, action in zip(episodes, actions):
+#                 next_state = envs[episode_id].step(action)
+#                 transitions[episode_id].append(Transition(states[episode_id], next_state, action))
+#                 states[episode_id] = next_state
+#                 if not next_state.terminal:
+#                     active_episodes.append(episode_id)
 
-            episodes = active_episodes
+#             episodes = active_episodes
 
-        rollouts = []
-        for episode_transitions, env in zip(transitions, envs):
-            end_state = episode_transitions[-1].target_state
-            # print(
-            #     episode_transitions[0].source_state.guesses, 
-            #     episode_transitions[0].target_state.guesses
-            # )
-            # print(end_state.guesses)
-            rollouts.append(Rollout(transitions=episode_transitions, secret=env.secret))
+#         rollouts = []
+#         for episode_transitions, env in zip(transitions, envs):
+#             end_state = episode_transitions[-1].target_state
+#             # print(
+#             #     episode_transitions[0].source_state.guesses, 
+#             #     episode_transitions[0].target_state.guesses
+#             # )
+#             # print(end_state.guesses)
+#             rollouts.append(Rollout(transitions=episode_transitions, secret=env.secret))
 
-        unique_rollouts = set(rollouts)
-        print(f"Rollout uniqueness ratio: {100 * len(unique_rollouts) / len(rollouts):.2f}%")
+#         unique_rollouts = set(rollouts)
+#         print(f"Rollout uniqueness ratio: {100 * len(unique_rollouts) / len(rollouts):.2f}%")
 
-        return rollouts
+#         return rollouts

@@ -10,8 +10,8 @@ import torch
 import tqdm
 import wandb
 
-from games.wordle.consts import EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
-from games.wordle.environment import BatchRoller, ExpansionRoller, Rollout
+from games.wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
+from games.wordle.environment import BatchRoller, Rollout
 from games.wordle.model import Sample, amp_context
 from games.wordle.model import Model
 from games.wordle.reward import Reward
@@ -132,8 +132,6 @@ class Trainer:
         reward_fn: Reward,
         return_discount: float,
         entropy_loss_weight: float,
-        resume_step: int | None,
-        num_expansions: int | None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -149,8 +147,6 @@ class Trainer:
         self.reward_fn = reward_fn
         self.return_discount = return_discount
         self.entropy_loss_weight = entropy_loss_weight
-        self.resume_step = resume_step
-        self.num_expansions = num_expansions
         self.scaler = torch.GradScaler(init_scale=2**16)
 
     def checkpoint(self, epoch_id: int) -> None:
@@ -165,10 +161,7 @@ class Trainer:
     def collect_samples(self, tracker: Tracker, epoch_id: int) -> list[Sample]:
         self.model.eval()
 
-        if self.resume_step and self.num_expansions:
-            roller = ExpansionRoller(self.vocab, self.resume_step, self.num_expansions)
-        else:
-            roller = BatchRoller(self.vocab)
+        roller = BatchRoller(self.vocab)
             
         rollouts = roller.run(
             policy=StochasticPolicy(model=self.model, vocab=self.vocab),
@@ -227,10 +220,14 @@ class Trainer:
                 assert torch.isnan(loss).sum() == 0
                 tracker.log_value("loss", loss.item())
 
+            if AMP_ENABLED:
                 loss = self.scaler.scale(loss)
                 loss.backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
         tracker.log_value("num_batches", num_batches)
 
