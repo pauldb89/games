@@ -12,7 +12,7 @@ import wandb
 
 from games.wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
 from games.wordle.environment import BatchRoller, Rollout
-from games.wordle.model import Sample, amp_context
+from games.wordle.model import AlgoConfig, Sample, amp_context
 from games.wordle.model import Model
 from games.wordle.reward import Reward
 from games.wordle.tracker import Tracker
@@ -20,20 +20,36 @@ from games.wordle.policy import ArgmaxPolicy, StochasticPolicy
 from games.wordle.vocab import Vocab
 
 
-def compute_returns(episode_samples: list[Sample], return_discount: float) -> list[Sample]:
+def compute_returns(episode_samples: list[Sample], return_discount: float, gae_lambda: float) -> list[Sample]:
     long_term_return = 0
+    next_value = 0
+    advantage = 0
     for sample in reversed(episode_samples):
         long_term_return = sample.reward + return_discount * long_term_return
         sample.long_term_return = long_term_return
+
+        td_error = sample.reward + return_discount * next_value - sample.action.value
+        advantage = td_error + gae_lambda * return_discount * advantage
+        next_value = sample.action.value
+
+        sample.advantage = advantage
+        sample.estimated_return = advantage + sample.action.value
+
     return episode_samples
 
 
-def normalize_returns(samples: list[Sample]) -> list[Sample]:
-    returns = [sample.long_term_return for sample in samples]
-    mean, std = np.mean(returns), np.std(returns)
+def normalize_values(samples: list[Sample], source_field: str, target_field: str) -> list[Sample]:
+    values = [getattr(s, source_field) for s in samples]
+    mean, std = np.mean(values), np.std(values)
     for sample in samples:
-        sample.long_term_return = (sample.long_term_return - mean) / (std + 1e-8)
+        setattr(sample, target_field, (getattr(sample, source_field) - mean) / (std + 1e-8))
     return samples
+
+
+def normalize_returns(samples: list[Sample]) -> list[Sample]:
+    samples = normalize_values(samples, source_field="long_term_return", target_field="normalized_long_term_return")
+    samples = normalize_values(samples, source_field="estimated_return", target_field="normalized_estimated_return")
+    return normalize_values(samples, source_field="advantage", target_field="normalized_advantage")
 
 
 def compute_entropy(rollouts: list[Rollout]) -> float:
@@ -96,9 +112,9 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
                     if turn_id == len(end_state.hints) - 1:
                         good_follow_ups_last_turn += 1
 
-        tracker.log_value("good_follow_up_ratio", good_follow_ups / follow_ups if follow_ups else 0)        
+        tracker.log_value("good_follow_up_ratio", good_follow_ups / follow_ups if follow_ups else 0)
         tracker.log_value(
-            "good_follow_up_ratio_last_turn", 
+            "good_follow_up_ratio_last_turn",
             good_follow_ups_last_turn / follow_ups_last_turn if follow_ups_last_turn else 0
         )
 
@@ -113,6 +129,19 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
 
     tracker.log_value("repeated_initial_guesses", len(rollouts) - len(initial_guesses))
     tracker.log_value("entropy", compute_entropy(rollouts))
+
+
+def compute_reward_metrics(samples: list[Sample], tracker: Tracker) -> None:
+    for sample in samples:
+        tracker.log_value("reward", sample.reward)
+        tracker.log_value("long_term_return", sample.long_term_return)
+        tracker.log_value("normalized_long_term_return", sample.normalized_long_term_return)
+        tracker.log_value("win_prob", sample.action.win_prob)
+        tracker.log_value("win_accuracy", int(sample.action.win_prob >= 0.5) == sample.win)
+
+    values = np.array([s.action.value for s in samples])
+    value_targets = np.array([s.normalized_long_term_return for s in samples])
+    tracker.log_value("explained_variance", 1 - np.var(values - value_targets) / (np.var(value_targets) + 1e-8))
 
 
 class Trainer:
@@ -130,8 +159,12 @@ class Trainer:
         lr: float,
         vocab: Vocab,
         reward_fn: Reward,
+        algo_config: AlgoConfig,
         return_discount: float,
+        gae_lambda: float,
+        value_loss_weight: float,
         entropy_loss_weight: float,
+        win_loss_weight: float,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -145,8 +178,12 @@ class Trainer:
         self.lr = lr
         self.vocab = vocab
         self.reward_fn = reward_fn
+        self.algo_config = algo_config
         self.return_discount = return_discount
+        self.gae_lambda = gae_lambda
+        self.value_loss_weight = value_loss_weight
         self.entropy_loss_weight = entropy_loss_weight
+        self.win_loss_weight = win_loss_weight
         self.scaler = torch.GradScaler(init_scale=2**16)
 
     def checkpoint(self, epoch_id: int) -> None:
@@ -162,7 +199,7 @@ class Trainer:
         self.model.eval()
 
         roller = BatchRoller(self.vocab)
-            
+
         rollouts = roller.run(
             policy=StochasticPolicy(model=self.model, vocab=self.vocab),
             seeds=[epoch_id * self.num_episodes_per_epoch + idx for idx in range(self.num_episodes_per_epoch)],
@@ -176,25 +213,32 @@ class Trainer:
         samples = []
         for rollout in rollouts:
             rewards = self.reward_fn(rollout.transitions)
+            end_state = rollout.transitions[-1].target_state
 
             episode_samples = []
             for transition, reward in zip(rollout.transitions, rewards):
                 episode_samples.append(
                     Sample(
-                        state=transition.source_state, action=transition.action, reward=reward, secret=rollout.secret
+                        state=transition.source_state,
+                        action=transition.action,
+                        reward=reward,
+                        win=int(end_state.win),
+                        secret=rollout.secret
                     )
                 )
 
-            episode_samples = compute_returns(episode_samples, return_discount=self.return_discount)
+            episode_samples = compute_returns(
+                episode_samples,
+                return_discount=self.return_discount,
+                gae_lambda=self.gae_lambda,
+            )
             samples.extend(episode_samples)
 
-        for sample in samples:
-            tracker.log_value("reward", sample.reward)
-            tracker.log_value("long_term_return", sample.long_term_return)
+        samples = normalize_returns(samples)
+        compute_reward_metrics(samples, tracker)
+        return samples
 
-        return normalize_returns(samples)
 
-        
     def train(self, samples: list[Any], tracker: Tracker) -> None:
         self.model.train()
         random.shuffle(samples)
@@ -206,17 +250,26 @@ class Trainer:
             batch_weight = len(batch_samples) / len(samples)
 
             self.optimizer.zero_grad()
-            
+
             with amp_context():
-                policy_loss, entropy_loss = self.model.loss(batch_samples)
+                policy_loss, value_loss, entropy_loss, win_loss = self.model.loss(batch_samples, self.algo_config)
 
                 policy_loss *= batch_weight
                 entropy_loss *= batch_weight
+                value_loss *= batch_weight
+                win_loss *= batch_weight
 
                 tracker.log_value("policy_loss", policy_loss.item())
+                tracker.log_value("value_loss", value_loss.item())
                 tracker.log_value("entropy_loss", entropy_loss.item())
+                tracker.log_value("win_loss", win_loss.item())
 
-                loss = policy_loss + self.entropy_loss_weight * entropy_loss                
+                loss = (
+                    policy_loss
+                    + self.value_loss_weight * value_loss
+                    + self.entropy_loss_weight * entropy_loss
+                    + self.win_loss_weight * win_loss
+                )
                 assert torch.isnan(loss).sum() == 0
                 tracker.log_value("loss", loss.item())
 
@@ -235,7 +288,7 @@ class Trainer:
     @torch.no_grad
     def evaluate(self, tracker: Tracker, epoch_id: int) -> None:
         self.model.eval()
-        
+
         # with tracker.scope("argmax"):
         roller = BatchRoller(self.vocab)
         rollouts = roller.run(
@@ -244,27 +297,6 @@ class Trainer:
         )
 
         compute_metrics(rollouts, tracker)
-
-            # print("Argmax rollouts")
-            # for rollout in rollouts[:5]:
-            #     print(f"Secret: {rollout.secret}")
-            #     end_state = rollout.transitions[-1].target_state
-            #     print(f"Guesses: {list(zip(end_state.guesses, end_state.hints))}")
-
-        # with tracker.scope("stochastic"):
-        #     roller = BatchRoller(self.vocab)
-        #     rollouts = roller.run(
-        #         policy=StochasticPolicy(model=self.model, vocab=self.vocab),
-        #         seeds=[-(idx+1) for idx in range(self.num_eval_episodes_per_epoch)]
-        #     )
-
-        #     compute_metrics(rollouts, tracker)
-
-        #     print("Stochastic rollouts")
-        #     for rollout in rollouts[:5]:
-        #         print(f"Secret: {rollout.secret}")
-        #         end_state = rollout.transitions[-1].target_state
-        #         print(f"Guesses: {list(zip(end_state.guesses, end_state.hints))}")
 
         metrics = {k: v for k, v in tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
         print(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")

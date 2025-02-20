@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import wandb
 
-from games.wordle.model import Model, ModelConfig
+from games.wordle.model import MLP, AdvantageType, AlgoConfig, MLPConfig, Model, ModelConfig, Transformer, TransformerConfig
 from games.wordle.reward import Reward
 from games.wordle.trainer import Trainer
 from games.wordle.vocab import Vocab, load_words
@@ -43,10 +43,28 @@ def main() -> None:
         default=0,
         help="Reward for guessing a correct letter, but incorrect location",
     )
+
     parser.add_argument("--exact_match_reward", type=float, default=0, help="Reward for guessing the correct letter")
     parser.add_argument("--win_reward", type=float, default=1, help="Reward for winning a game")
+    parser.add_argument(
+        "--advantage_type",
+        default="monte_carlo",
+        choices=[e.value for e in AdvantageType],
+        help="What kind of advantage to use"
+    )
+    parser.add_argument(
+        "--bootstrap_values",
+        default=False,
+        action="store_true",
+        help="Bootstrap value estimates instead of using monte carlo returns as targets")
     parser.add_argument("--return_discount", type=float, default=0.95, help="Return discount factor (gamma)")
+    parser.add_argument("--gae_lambda", type=float, default=0.95, help="TD lambda for generalize advantage estimate")
+    parser.add_argument("--value_loss_weight", type=float, default=0, help="Value loss weight")
     parser.add_argument("--entropy_loss_weight", type=float, default=0, help="Entropy loss weight")
+    parser.add_argument("--win_loss_weight", type=float, default=0, help="Win loss weight")
+    parser.add_argument(
+        "--model_type", type=str, choices=["transformer", "mlp"], default="transformer", help="Model type"
+    )
     parser.add_argument("--dim", type=int, default=128, help="Hidden dimension")
     parser.add_argument("--layers", type=int, default=4, help="Number of layers")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads")
@@ -65,8 +83,14 @@ def main() -> None:
     torch.backends.cudnn.benchmark = False  # Can slow down training but ensures consistency
     torch.use_deterministic_algorithms(True)
 
-    model_config = ModelConfig(layers=args.layers, dim=args.dim, heads=args.heads)
-    model = Model(device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), config=model_config)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.model_type == "transformer":
+        model_config = TransformerConfig(layers=args.layers, dim=args.dim, heads=args.heads)
+        model = Transformer(device=device, config=model_config)
+    else:
+        model_config = MLPConfig(layers=args.layers, dim=args.dim)
+        model = MLP(device=device, config=model_config)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     checkpoint_path = os.path.join(args.checkpoint_path, args.name)
@@ -93,8 +117,15 @@ def main() -> None:
             exact_match_reward=args.exact_match_reward,
             win_reward=args.win_reward,
         ),
+        algo_config=AlgoConfig(
+            advantage_type=AdvantageType(args.advantage_type),
+            boostrap_values=args.bootstrap_values,
+        ),
         return_discount=args.return_discount,
+        gae_lambda=args.gae_lambda,
+        value_loss_weight=args.value_loss_weight,
         entropy_loss_weight=args.entropy_loss_weight,
+        win_loss_weight=args.win_loss_weight,
     )
     trainer.run()
     wandb.finish()

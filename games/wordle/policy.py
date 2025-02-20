@@ -1,5 +1,6 @@
 import abc
 import torch
+import torch.nn.functional as F
 from games.wordle.consts import WORD_LENGTH
 from games.wordle.model import Model
 from games.wordle.state import Action, State
@@ -31,19 +32,27 @@ class ModelPolicy(Policy):
 
     def choose_actions(self, states: list[State]) -> list[Action]:
         masks = self.create_masks(states)
-        logits = self.model(states, masks)
+        logits, values, win_probs = self.model(states, masks)
         letter_ids = self.choose_letter_ids(logits)
         log_probs = torch.log_softmax(logits, dim=-1).detach().cpu().numpy()
+        values = values.detach().cpu().numpy()
+        win_probs = win_probs.detach().cpu().numpy()
 
         return [
-            Action(letter=get_letter(letter_id), mask=mask, lprobs=lprobs) 
-            for letter_id, mask, lprobs in zip(letter_ids, masks, log_probs)
+            Action(
+                letter=get_letter(letter_id),
+                value=value,
+                mask=mask,
+                lprobs=lprobs,
+                win_prob=win_prob
+            )
+            for letter_id, value, win_prob, mask, lprobs in zip(letter_ids, values, win_probs, masks, log_probs)
         ]
-        
+
     @abc.abstractmethod
     def choose_letter_ids(self, logits: torch.Tensor) -> list[int]:
         ...
-        
+
 
 class StochasticPolicy(ModelPolicy):
     def choose_letter_ids(self, logits: torch.Tensor) -> list[int]:

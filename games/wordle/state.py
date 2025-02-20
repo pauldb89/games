@@ -22,5 +22,7 @@ class State:
 @dataclass(frozen=True)
 class Action:
     letter: str
+    value: float
+    win_prob: float
     mask: list[int]
     lprobs: np.ndarray | None = None
