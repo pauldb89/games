@@ -1,15 +1,18 @@
 import os
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 import random
 
 import numpy as np
 import torch
-import wandb
+from torch.nn.parallel import DistributedDataParallel as DDP
 
-from games.wordle.model import MLP, AdvantageType, AlgoConfig, MLPConfig, Model, ModelConfig, Transformer, TransformerConfig
+from common.distributed import distributed_cleanup, distributed_setup
+from common.wandb import wandb_config_update, wandb_init
+from games.wordle.model import MLP, AdvantageType, AlgoConfig, MLPConfig, ModelConfig, PolicyLossType, SamplingType, Transformer, TransformerConfig, TransformerConfig
 from games.wordle.reward import Reward
 from games.wordle.trainer import Trainer
 from games.wordle.vocab import Vocab, load_words
+from games.wordle.wandb import wandb_finish
 
 
 def main() -> None:
@@ -21,14 +24,20 @@ def main() -> None:
         default=os.path.expanduser("~/data/checkpoints/wordle"),
         help="Checkpoint path",
     )
+    parser.add_argument(
+        "--initial_checkpoint_path",
+        type=str,
+        default=None,
+        help="Initial checkpoint for model/optimizer"
+    )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
-    parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs")
-    parser.add_argument("--updates_per_batch", type=int, default=1, help="Number of gradient updates per batch")
-    parser.add_argument("--num_episodes_per_epoch", type=int, default=100, help="Number of episodes per epoch")
-    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=100, help="Number of episodes per epoch")
+    parser.add_argument("--epochs", type=int, default=10_000, help="Number of epochs")
+    parser.add_argument("--updates_per_epoch", type=int, default=50, help="Number of gradient updates per batch")
+    parser.add_argument("--num_episodes_per_epoch", type=int, default=500, help="Number of episodes per epoch")
+    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=500, help="Number of episodes per epoch")
     parser.add_argument("--evaluate_every_n_epochs", type=int, default=25, help="Evaluate every n epochs")
     parser.add_argument("--checkpoint_every_n_epochs", type=int, default=20, help="Policy checkpointing frequency")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate")
     parser.add_argument(
         "--vocab_path",
         type=str,
@@ -48,50 +57,98 @@ def main() -> None:
     parser.add_argument("--win_reward", type=float, default=1, help="Reward for winning a game")
     parser.add_argument(
         "--advantage_type",
-        default="monte_carlo",
+        default=AdvantageType.GENERALIZED_ADVANTAGE.value,
         choices=[e.value for e in AdvantageType],
-        help="What kind of advantage to use"
+        help="What kind of advantage to use",
     )
     parser.add_argument(
         "--bootstrap_values",
         default=False,
         action="store_true",
-        help="Bootstrap value estimates instead of using monte carlo returns as targets")
+        help="Bootstrap value estimates instead of using monte carlo returns as targets",
+    )
+    parser.add_argument(
+        "--policy_loss_type",
+        default=PolicyLossType.PPO.value,
+        choices=[e.value for e in PolicyLossType],
+        help="Policy loss type",
+    )
+    parser.add_argument("--ppo_clip_coeff", type=float, default=0.1, help="PPO clipping coefficient")
     parser.add_argument("--return_discount", type=float, default=0.95, help="Return discount factor (gamma)")
     parser.add_argument("--gae_lambda", type=float, default=0.95, help="TD lambda for generalize advantage estimate")
-    parser.add_argument("--value_loss_weight", type=float, default=0, help="Value loss weight")
-    parser.add_argument("--entropy_loss_weight", type=float, default=0, help="Entropy loss weight")
-    parser.add_argument("--win_loss_weight", type=float, default=0, help="Win loss weight")
+    parser.add_argument("--value_loss_weight", type=float, default=0.05, help="Value loss weight")
+    parser.add_argument("--entropy_loss_weight", type=float, default=0.03, help="Entropy loss weight")
+    parser.add_argument("--win_loss_weight", type=float, default=0.05, help="Win loss weight")
     parser.add_argument(
-        "--model_type", type=str, choices=["transformer", "mlp"], default="transformer", help="Model type"
+        "--model_type", type=str, choices=["transformer", "mlp"], default="mlp", help="Model type"
     )
-    parser.add_argument("--dim", type=int, default=128, help="Hidden dimension")
-    parser.add_argument("--layers", type=int, default=4, help="Number of layers")
+    parser.add_argument("--dim", type=int, default=256, help="Hidden dimension")
+    parser.add_argument("--layers", type=int, default=2, help="Number of layers")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads")
+    parser.add_argument(
+        "--separate_encoder",
+        default=False,
+        action="store_true",
+        help="Do not share encoder params between policy and value function"
+    )
     parser.add_argument("--skip_mask", default=False, action="store_true", help="Whether to skip masking when sampling")
+    parser.add_argument(
+        "--sampling_type",
+        type=str,
+        default="none",
+        choices=[e.value for e in SamplingType],
+        help="Logic for picking samples for computing loss"
+    )
+    parser.add_argument("--sampling_beta", type=float, default=1, help="Exponent for sampling weights")
     args = parser.parse_args()
 
-    wandb.init(project="wordle", name=args.name, dir="/wandb")
-    wandb.config.update(args)
+    rank = distributed_setup()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
+
+    wandb_init(project="wordle", name=args.name, dir="/wandb")
+    wandb_config_update(args)
+
+    random.seed(rank)
+    np.random.seed(rank)
+    torch.manual_seed(rank)
+    torch.cuda.manual_seed(rank)
+    torch.cuda.manual_seed_all(rank)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False  # Can slow down training but ensures consistency
     torch.use_deterministic_algorithms(True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if args.model_type == "transformer":
-        model_config = TransformerConfig(layers=args.layers, dim=args.dim, heads=args.heads)
-        model = Transformer(device=device, config=model_config)
+
+    if args.initial_checkpoint_path is not None:
+        with open(os.path.join(args.initial_checkpoint_path, "config.json"), "r") as f:
+            model_config = ModelConfig.validate_json(f.read())
+    elif args.model_type == "transformer":
+        model_config = TransformerConfig(
+            layers=args.layers,
+            dim=args.dim,
+            heads=args.heads,
+            separate_encoder=args.separate_encoder,
+        )
+    elif args.model_type == "mlp":
+        model_config = MLPConfig(layers=args.layers, dim=args.dim, separate_encoder=args.separate_encoder)
     else:
-        model_config = MLPConfig(layers=args.layers, dim=args.dim)
+        raise ValueError(f"Model type {args.model_type} not supported")
+
+    if model_config.type == "transformer":
+        model = Transformer(device=device, config=model_config)
+    elif model_config.type == "mlp":
         model = MLP(device=device, config=model_config)
+    else:
+        raise ValueError(f"Model config type {model_config.type} not supported")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    if args.initial_checkpoint_path is not None:
+        model.load_state_dict(torch.load(os.path.join(args.initial_checkpoint_path, "model.pth"), weights_only=True))
+        optimizer.load_state_dict(
+            torch.load(os.path.join(args.initial_checkpoint_path, "optimizer.pth"), weights_only=True)
+        )
+
+    model = DDP(model, device_ids=[rank], find_unused_parameters=True)
 
     checkpoint_path = os.path.join(args.checkpoint_path, args.name)
     os.makedirs(checkpoint_path, exist_ok=True)
@@ -104,11 +161,11 @@ def main() -> None:
         num_eval_episodes_per_epoch=args.num_eval_episodes_per_epoch,
         evaluate_every_n_epochs=args.evaluate_every_n_epochs,
         checkpoint_every_n_epochs=args.checkpoint_every_n_epochs,
-        updates_per_batch=args.updates_per_batch,
+        updates_per_epoch=args.updates_per_epoch,
         lr=args.lr,
         vocab=Vocab(
-            words=load_words(args.vocab_path), 
-            max_secret_options=args.max_secret_options, 
+            words=load_words(args.vocab_path),
+            max_secret_options=args.max_secret_options,
             skip_mask=args.skip_mask,
         ),
         reward_fn=Reward(
@@ -120,6 +177,10 @@ def main() -> None:
         algo_config=AlgoConfig(
             advantage_type=AdvantageType(args.advantage_type),
             boostrap_values=args.bootstrap_values,
+            policy_loss_type=PolicyLossType(args.policy_loss_type),
+            ppo_clip_coeff=args.ppo_clip_coeff,
+            sampling_type=SamplingType(args.sampling_type),
+            sampling_beta=args.sampling_beta,
         ),
         return_discount=args.return_discount,
         gae_lambda=args.gae_lambda,
@@ -128,7 +189,9 @@ def main() -> None:
         win_loss_weight=args.win_loss_weight,
     )
     trainer.run()
-    wandb.finish()
+
+    wandb_finish()
+    distributed_cleanup()
 
 
 if __name__ == "__main__":

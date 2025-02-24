@@ -32,7 +32,7 @@ class ModelPolicy(Policy):
 
     def choose_actions(self, states: list[State]) -> list[Action]:
         masks = self.create_masks(states)
-        logits, values, win_probs = self.model(states, masks)
+        logits, values, win_probs = self.model.module.compute_logits(states, masks)
         letter_ids = self.choose_letter_ids(logits)
         log_probs = torch.log_softmax(logits, dim=-1).detach().cpu().numpy()
         values = values.detach().cpu().numpy()

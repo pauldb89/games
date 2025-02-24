@@ -4,9 +4,9 @@ import contextlib
 from dataclasses import dataclass
 import enum
 import math
-from typing import Annotated, Literal, Union
+from typing import Literal, Union
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, TypeAdapter
 from torch import nn
 import torch
 import torch.nn.functional as F
@@ -32,10 +32,13 @@ class Sample:
     long_term_return: float = 0
     estimated_return: float = 0
     advantage: float = 0
+    td_error: float = 0
 
     normalized_long_term_return: float = 0
     normalized_estimated_return: float = 0
     normalized_advantage: float = 0
+
+    importance_weight: float = 1
 
     secret: str = ""
 
@@ -55,22 +58,28 @@ class PositionEncodings(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.embeddings[:, :x.size(1), :]
-    
 
-class TransformerConfig(BaseModel):
+
+class BaseConfig(BaseModel):
+    type: Literal["transformer", "mlp"]
+
+
+class TransformerConfig(BaseConfig):
     type: Literal["transformer"] = "transformer"
     layers: int
     heads: int
     dim: int
+    separate_encoder: bool
 
 
-class MLPConfig(BaseModel):
+class MLPConfig(BaseConfig):
     type: Literal["mlp"] = "mlp"
     layers: int
     dim: int
+    separate_encoder: bool
 
 
-ModelConfig = Annotated[Union[TransformerConfig, MLPConfig], Field(discriminator="type")]
+ModelConfig = TypeAdapter(Union[TransformerConfig, MLPConfig])
 
 
 class AdvantageType(enum.StrEnum):
@@ -79,10 +88,25 @@ class AdvantageType(enum.StrEnum):
     GENERALIZED_ADVANTAGE = "generalized_advantage"
 
 
+class PolicyLossType(enum.StrEnum):
+    POLICY_GRADIENT = "policy_gradient"
+    PPO = "ppo"
+
+
+class SamplingType(enum.StrEnum):
+    NONE = "none"
+    ADVANTAGE = "advantage"
+    TD_ERROR = "td_error"
+
+
 class AlgoConfig(BaseModel):
     advantage_type: AdvantageType
     # Whether to boostrap the value function or to use monte carlo returns.
     boostrap_values: bool
+    policy_loss_type: PolicyLossType
+    ppo_clip_coeff: float
+    sampling_type: SamplingType
+    sampling_beta: float
 
 
 class Model(nn.Module):
@@ -91,21 +115,30 @@ class Model(nn.Module):
         super().to(device)
 
     @abc.abstractmethod
-    def forward(self, states: list[State], head_masks: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
+    def compute_logits(self, states: list[State], head_masks: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
         ...
 
-    def loss(self, samples: list[Sample], algo_config: AlgoConfig) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        samples: list[Sample],
+        algo_config: AlgoConfig,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         states = []
         masks = []
         targets = []
+        old_log_probs = []
+        wins = []
         policy_gradient_weights = []
         value_targets = []
-        wins = []
+        importance_weights = []
         for sample in samples:
             states.append(sample.state)
             masks.append(sample.action.mask)
-            targets.append(letter_index(sample.action.letter))
+            letter_id = letter_index(sample.action.letter)
+            targets.append(letter_id)
+            old_log_probs.append(sample.action.lprobs[letter_id])
             wins.append(sample.win)
+            importance_weights.append(sample.importance_weight)
 
             if algo_config.advantage_type == AdvantageType.MONTE_CARLO:
                 policy_gradient_weights.append(sample.normalized_long_term_return)
@@ -114,20 +147,30 @@ class Model(nn.Module):
             elif algo_config.advantage_type == AdvantageType.GENERALIZED_ADVANTAGE:
                 policy_gradient_weights.append(sample.normalized_advantage)
             else:
-                raise ValueError(f"Unknown advantage type {algo_config.advantage_type}")
+                raise ValueError(f"Advantage type {algo_config.advantage_type} not supported")
 
             if algo_config.boostrap_values:
                 value_targets.append(sample.estimated_return)
             else:
                 value_targets.append(sample.normalized_long_term_return)
 
-        logits, values, win_probs = self(states, masks)
+        logits, values, win_probs = self.compute_logits(states, masks)
         log_probs = torch.log_softmax(logits, dim=-1)
 
-        target_log_probs = log_probs[range(len(samples)), targets]
         policy_gradient_weights = torch.tensor(policy_gradient_weights, device=self.device, dtype=torch.float32)
-        wins = torch.tensor(wins, device=self.device, dtype=torch.float32)
-        policy_loss = -(policy_gradient_weights * target_log_probs).mean()
+        importance_weights = torch.tensor(importance_weights, device=self.device, dtype=torch.float32)
+        if algo_config.policy_loss_type == PolicyLossType.POLICY_GRADIENT:
+            target_log_probs = log_probs[range(len(samples)), targets]
+            policy_loss = -(policy_gradient_weights / importance_weights * target_log_probs).mean()
+        elif algo_config.policy_loss_type == PolicyLossType.PPO:
+            new_log_probs = log_probs[range(len(samples)), targets]
+            old_log_probs = torch.tensor(old_log_probs, device=self.device, dtype=torch.float32)
+            ratio = (new_log_probs - old_log_probs).exp()
+            clipped_ratio = torch.clip(ratio, 1 - algo_config.ppo_clip_coeff, 1 + algo_config.ppo_clip_coeff)
+            policy_loss_terms = -torch.min(policy_gradient_weights * ratio, policy_gradient_weights * clipped_ratio)
+            policy_loss = (policy_loss_terms / importance_weights).mean()
+        else:
+            raise ValueError(f"Policy loss type {algo_config.policy_loss_type} not supported")
 
         masks = torch.tensor(masks, device=self.device)
         masked_log_probs = torch.where(masks, log_probs, 0)
@@ -136,6 +179,8 @@ class Model(nn.Module):
 
         value_targets = torch.tensor(value_targets, device=self.device, dtype=torch.float32)
         value_loss = F.mse_loss(values, value_targets)
+
+        wins = torch.tensor(wins, device=self.device, dtype=torch.float32)
         win_loss = F.binary_cross_entropy(win_probs, wins)
 
         return policy_loss, value_loss, entropy_loss, win_loss
@@ -151,7 +196,7 @@ class Model(nn.Module):
             targets.append(letter_index(sample.action.letter))
             weights.append(sample.reward)
 
-        logits = self(states, masks)
+        logits = self.compute_logits(states, masks)
         targets = torch.tensor(targets, device=self.device)
         weights = torch.tensor(weights, device=self.device)
         losses = F.cross_entropy(logits, targets, reduction="none")
@@ -170,16 +215,25 @@ class Transformer(Model):
 
         self.positional_encodings = PositionEncodings(dim=config.dim)
 
-        self.encoder = nn.TransformerEncoder(
-            encoder_layer=nn.TransformerEncoderLayer(
-                d_model=config.dim,
-                nhead=config.heads, 
-                dim_feedforward=4 * config.dim,
-                batch_first=True,
-                norm_first=True,
-            ),
-            num_layers=config.layers,
-        )
+        def make_encoder() -> nn.TransformerEncoder:
+            return nn.TransformerEncoder(
+                encoder_layer=nn.TransformerEncoderLayer(
+                    d_model=config.dim,
+                    nhead=config.heads,
+                    dim_feedforward=4 * config.dim,
+                    batch_first=True,
+                    norm_first=True,
+                ),
+                num_layers=config.layers,
+            )
+
+        if config.separate_encoder:
+            self.policy_encoder = make_encoder()
+            self.value_encoder = make_encoder()
+            self.win_encoder = make_encoder()
+        else:
+            self.encoder = make_encoder()
+
         self.action_head = nn.Sequential(
             nn.LayerNorm(config.dim),
             nn.Linear(config.dim, 26, bias=False)
@@ -219,25 +273,33 @@ class Transformer(Model):
         mask = torch.arange(x.size(1), device=self.device).expand(len(seqs), -1) >= lengths.unsqueeze(dim=1)
 
         return x, mask
-    
-    def forward(
+
+    def compute_logits(
         self,
         states: list[State],
         head_masks: list[list[int]]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         seqs = self.embed(states)
 
-        x, attn_key_mask = self.pad(seqs)
+        features, attn_key_mask = self.pad(seqs)
 
-        x = self.positional_encodings(x)
-        x = self.encoder(x, src_key_padding_mask=attn_key_mask)
+        features = self.positional_encodings(x)
+
+        if self.config.separate_encoder:
+            x = self.policy_encoder(features, src_key_padding_mask=attn_key_mask)
+            v = self.value_encoder(features, src_key_padding_mask=attn_key_mask)
+            w = self.win_encoder(features, src_key_padding_mask=attn_key_mask)
+        else:
+            x = v = w = self.encoder(features, src_key_padding_mask=attn_key_mask)
 
         last_token_ids = torch.tensor([seq.size(0) - 1 for seq in seqs], device=self.device)
         x = x[torch.arange(len(seqs), device=self.device), last_token_ids]
+        v = v[torch.arange(len(seqs), device=self.device), last_token_ids]
+        w = w[torch.arange(len(seqs), device=self.device), last_token_ids]
 
         logits = self.action_head(x).masked_fill(~torch.tensor(head_masks, device=self.device), value=float("-inf"))
-        values = self.value_head(x).squeeze(dim=1)
-        win_probs = F.sigmoid(self.win_head(x)).squeeze(dim=1)
+        values = self.value_head(v).squeeze(dim=1)
+        win_probs = F.sigmoid(self.win_head(w)).squeeze(dim=1)
         return logits, values, win_probs
 
 
@@ -248,15 +310,24 @@ class MLP(Model):
         self.config = config
         self.input_dim = 1 + 26 + 26 * 5 * 3
 
-        self.layers = nn.Sequential(
-            nn.Linear(self.input_dim, config.dim),
-            nn.LayerNorm(config.dim),
-            nn.ReLU(),
-        )
-        for _ in range(config.layers-1):
-            self.layers.append(nn.Linear(config.dim, config.dim))
-            self.layers.append(nn.LayerNorm(config.dim))
-            self.layers.append(nn.ReLU())
+        def make_mlp() -> nn.Sequential:
+            layers = nn.Sequential(
+                nn.Linear(self.input_dim, config.dim),
+                nn.LayerNorm(config.dim),
+                nn.ReLU(),
+            )
+            for _ in range(config.layers-1):
+                layers.append(nn.Linear(config.dim, config.dim))
+                layers.append(nn.LayerNorm(config.dim))
+                layers.append(nn.ReLU())
+            return layers
+
+        if config.separate_encoder:
+            self.policy_layers = make_mlp()
+            self.value_layers = make_mlp()
+            self.win_layers = make_mlp()
+        else:
+            self.layers = make_mlp()
 
         self.action_heads = nn.ModuleList([nn.Linear(config.dim, 26, bias=False) for _ in range(WORD_LENGTH)])
         self.value_head = nn.Linear(config.dim, 1)
@@ -294,14 +365,19 @@ class MLP(Model):
         return np.array(batch_features)
 
 
-    def forward(
+    def compute_logits(
         self,
         states: list[State],
         head_masks: list[list[int]]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        x = torch.tensor(self.encode(states), device=self.device)
+        features = torch.tensor(self.encode(states), device=self.device)
 
-        x = self.layers(x)
+        if self.config.separate_encoder:
+            x = self.policy_layers(features)
+            y = self.value_layers(features)
+            w = self.win_layers(features)
+        else:
+            x = y = w = self.layers(features)
 
         groups = collections.defaultdict(list)
         for idx, state in enumerate(states):
@@ -314,7 +390,7 @@ class MLP(Model):
             logits[batch_idxs] = self.action_heads[head_idx](x[batch_idxs])
 
         logits = logits.masked_fill(~torch.tensor(head_masks, device=self.device), value=float("-inf"))
-        values = self.value_head(x).squeeze(dim=1)
-        win_probs = F.sigmoid(self.win_head(x).squeeze(dim=1))
+        values = self.value_head(y).squeeze(dim=1)
+        win_probs = F.sigmoid(self.win_head(w).squeeze(dim=1))
 
         return logits, values, win_probs

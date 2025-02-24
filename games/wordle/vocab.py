@@ -6,7 +6,7 @@ def load_words(path: str) -> list[str]:
     with open(path, "r") as f:
         for line in f:
             words.append(line.strip())
-    random.shuffle(words)    
+    random.Random(0).shuffle(words)
     return words
 
 

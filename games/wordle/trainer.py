@@ -1,5 +1,8 @@
 import collections
+import time
+import hashlib
 import json
+import math
 import os
 import random
 from typing import Any
@@ -7,9 +10,10 @@ from typing import Any
 import more_itertools
 import numpy as np
 import torch
-import tqdm
-import wandb
 
+from common.distributed import get_rank, tqdm_once, world_size
+from games.wordle.distributed import print_once
+from games.wordle.wandb import wandb_log
 from games.wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
 from games.wordle.environment import BatchRoller, Rollout
 from games.wordle.model import AlgoConfig, Sample, amp_context
@@ -32,6 +36,7 @@ def compute_returns(episode_samples: list[Sample], return_discount: float, gae_l
         advantage = td_error + gae_lambda * return_discount * advantage
         next_value = sample.action.value
 
+        sample.td_error = td_error
         sample.advantage = advantage
         sample.estimated_return = advantage + sample.action.value
 
@@ -144,6 +149,36 @@ def compute_reward_metrics(samples: list[Sample], tracker: Tracker) -> None:
     tracker.log_value("explained_variance", 1 - np.var(values - value_targets) / (np.var(value_targets) + 1e-8))
 
 
+def batch_samples(samples: list[Sample], algo_config: AlgoConfig, updates_per_epoch: int) -> list[list[Sample]]:
+    if algo_config.sampling_type == "none":
+        return [list(batch) for batch in more_itertools.divide(updates_per_epoch, samples)]
+
+    batch_size = len(samples) // updates_per_epoch
+    weights = []
+    for s in samples:
+        if algo_config.sampling_type == "advantage":
+            s.importance_weight = math.exp(s.advantage) ** algo_config.sampling_beta
+        elif algo_config.sampling_type == "td_error":
+            s.importance_weight = abs(s.td_error) ** algo_config.sampling_beta
+        else:
+            raise ValueError(f"Unknown sampling strategy {algo_config.sampling_type}")
+        weights.append(s.importance_weight)
+
+    return [random.choices(samples, weights=weights, k=batch_size) for _ in range(updates_per_epoch)]
+
+
+def gather_trackers(tracker: Tracker) -> Tracker:
+    all_trackers = [None] * world_size()
+    torch.distributed.all_gather_object(all_trackers, tracker)
+
+    for rank, gathered_tracker in enumerate(all_trackers):
+        if rank != get_rank():
+            for metric_name, values in gathered_tracker.metrics.items():
+                tracker.metrics[metric_name].extend(values)
+
+    return tracker
+
+
 class Trainer:
     def __init__(
         self,
@@ -155,7 +190,7 @@ class Trainer:
         num_eval_episodes_per_epoch: int,
         evaluate_every_n_epochs: int,
         checkpoint_every_n_epochs: int,
-        updates_per_batch: int,
+        updates_per_epoch: int,
         lr: float,
         vocab: Vocab,
         reward_fn: Reward,
@@ -174,7 +209,7 @@ class Trainer:
         self.num_eval_episodes_per_epoch = num_eval_episodes_per_epoch
         self.evaluate_every_n_epochs = evaluate_every_n_epochs
         self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
-        self.updates_per_batch = updates_per_batch
+        self.updates_per_epoch = updates_per_epoch
         self.lr = lr
         self.vocab = vocab
         self.reward_fn = reward_fn
@@ -188,11 +223,14 @@ class Trainer:
 
     def checkpoint(self, epoch_id: int) -> None:
         self.model.eval()
+
+        model = self.model.module
         checkpoint_dir = os.path.join(self.checkpoint_path, f"{epoch_id:05d}")
         os.makedirs(checkpoint_dir, exist_ok=True)
         with open(os.path.join(checkpoint_dir, "config.json"), "w") as f:
-            f.write(self.model.config.model_dump_json())
-        torch.save(self.model.state_dict(), os.path.join(checkpoint_dir, "model.pth"))
+            f.write(model.config.model_dump_json())
+        torch.save(model.state_dict(), os.path.join(checkpoint_dir, "model.pth"))
+        torch.save(self.optimizer.state_dict(), os.path.join(checkpoint_dir, "optimizer.pth"))
 
     @torch.no_grad
     def collect_samples(self, tracker: Tracker, epoch_id: int) -> list[Sample]:
@@ -202,13 +240,16 @@ class Trainer:
 
         rollouts = roller.run(
             policy=StochasticPolicy(model=self.model, vocab=self.vocab),
-            seeds=[epoch_id * self.num_episodes_per_epoch + idx for idx in range(self.num_episodes_per_epoch)],
+            seeds=[
+                epoch_id * self.num_episodes_per_epoch + idx
+                for idx in range(get_rank(), self.num_episodes_per_epoch, world_size())
+            ],
         )
 
         compute_metrics(rollouts, tracker)
-        for r in rollouts:
-            end_state = r.transitions[-1].target_state
-            print(f"Secret: {r.secret}, guesses: {end_state.guesses}, hints: {end_state.hints}")
+        # for r in rollouts:
+        #     end_state = r.transitions[-1].target_state
+        #     print(f"Secret: {r.secret}, guesses: {end_state.guesses}, hints: {end_state.hints}")
 
         samples = []
         for rollout in rollouts:
@@ -241,18 +282,23 @@ class Trainer:
 
     def train(self, samples: list[Any], tracker: Tracker) -> None:
         self.model.train()
+
         random.shuffle(samples)
+        tracker.log_value("num_samples", len(samples))
 
         num_batches = 0
-        for batch_samples in tqdm.tqdm(more_itertools.divide(self.updates_per_batch, samples), desc="Train step"):
-            batch_samples = list(batch_samples)
+        for batch in tqdm_once(batch_samples(samples, self.algo_config, self.updates_per_epoch), desc="Train step"):
             num_batches += 1
-            batch_weight = len(batch_samples) / len(samples)
+            batch_weight = len(batch) / len(samples)
+
+            tracker.log_value("batch_size", len(batch))
+            for sample in batch:
+                tracker.log_value("sample_win", sample.win)
 
             self.optimizer.zero_grad()
 
             with amp_context():
-                policy_loss, value_loss, entropy_loss, win_loss = self.model.loss(batch_samples, self.algo_config)
+                policy_loss, value_loss, entropy_loss, win_loss = self.model(batch, self.algo_config)
 
                 policy_loss *= batch_weight
                 entropy_loss *= batch_weight
@@ -280,6 +326,7 @@ class Trainer:
                 self.scaler.update()
             else:
                 loss.backward()
+
                 self.optimizer.step()
 
         tracker.log_value("num_batches", num_batches)
@@ -289,17 +336,16 @@ class Trainer:
     def evaluate(self, tracker: Tracker, epoch_id: int) -> None:
         self.model.eval()
 
-        # with tracker.scope("argmax"):
         roller = BatchRoller(self.vocab)
         rollouts = roller.run(
             policy=ArgmaxPolicy(model=self.model, vocab=self.vocab),
-            seeds=[-(idx+1) for idx in range(self.num_eval_episodes_per_epoch)]
+            seeds=[-(idx+1) for idx in range(get_rank(), self.num_eval_episodes_per_epoch, world_size())]
         )
 
         compute_metrics(rollouts, tracker)
 
         metrics = {k: v for k, v in tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
-        print(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
+        print_once(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
 
 
     def run(self) -> None:
@@ -324,12 +370,15 @@ class Trainer:
                     with tracker.timer("t_overall"):
                         self.train(samples, tracker)
 
+            tracker = gather_trackers(tracker)
             metrics = tracker.report()
-            print(
+            print_once(
                 f"Epoch: {epoch_id}, Loss: {metrics['train/loss_sum']}, "
+                f"Win rate: {100 * metrics['collect_samples/wins_mean']:.2f}%, "
                 f"Total time: {metrics['t_overall_mean']} seconds"
+
             )
-            wandb.log(metrics, step=epoch_id)
+            wandb_log(metrics, step=epoch_id)
 
         tracker = Tracker()
         with tracker.scope("checkpoint"):
