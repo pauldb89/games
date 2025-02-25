@@ -70,7 +70,7 @@ class Environment:
 
         self.state = state
         return self.state
-    
+
 
 @dataclass(frozen=True)
 class Transition:
@@ -88,14 +88,14 @@ class Rollout:
     def key(self) -> tuple[str]:
         end_state = self.transitions[-1].target_state
         return (self.secret,) + tuple(guess for guess in end_state.guesses)
-    
+
     def __hash__(self) -> int:
         return hash(self.key)
-    
+
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Rollout):
             return False
-        
+
         return self.key == other.key
 
 
@@ -110,10 +110,15 @@ class BatchRoller(Roller):
     def __init__(self, vocab: Vocab) -> None:
         self.vocab = vocab
 
-    def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]:
-        episodes = list(range(len(seeds)))
-        envs = [Environment() for _ in episodes]
-        states = [env.reset(secret=self.vocab.pick_secret(seed)) for env, seed in zip(envs, seeds)]
+    def run(self, policy: Policy, seeds: list[int] | None = None) -> list[Rollout]:
+        if seeds is None:
+            episodes = list(range(len(self.vocab.secret_options)))
+            envs = [Environment() for _ in episodes]
+            states = [env.reset(secret=secret) for env, secret in zip(envs, self.vocab.secret_options)]
+        else:
+            episodes = list(range(len(seeds)))
+            envs = [Environment() for _ in episodes]
+            states = [env.reset(secret=self.vocab.pick_secret(seed)) for env, seed in zip(envs, seeds)]
 
         transitions: list[list[Transition]] = [[] for _ in episodes]
         while episodes:
@@ -181,7 +186,7 @@ class BatchRoller(Roller):
 #         for episode_transitions, env in zip(transitions, envs):
 #             end_state = episode_transitions[-1].target_state
 #             # print(
-#             #     episode_transitions[0].source_state.guesses, 
+#             #     episode_transitions[0].source_state.guesses,
 #             #     episode_transitions[0].target_state.guesses
 #             # )
 #             # print(end_state.guesses)

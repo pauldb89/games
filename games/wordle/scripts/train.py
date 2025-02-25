@@ -34,7 +34,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=10_000, help="Number of epochs")
     parser.add_argument("--updates_per_epoch", type=int, default=50, help="Number of gradient updates per batch")
     parser.add_argument("--num_episodes_per_epoch", type=int, default=500, help="Number of episodes per epoch")
-    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=500, help="Number of episodes per epoch")
+    parser.add_argument("--num_eval_episodes_per_epoch", type=int, default=None, help="Number of episodes per epoch")
     parser.add_argument("--evaluate_every_n_epochs", type=int, default=25, help="Evaluate every n epochs")
     parser.add_argument("--checkpoint_every_n_epochs", type=int, default=20, help="Policy checkpointing frequency")
     parser.add_argument("--lr", type=float, default=3e-5, help="Learning rate")

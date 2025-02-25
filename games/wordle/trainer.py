@@ -339,10 +339,11 @@ class Trainer:
         self.model.eval()
 
         roller = BatchRoller(self.vocab)
-        rollouts = roller.run(
-            policy=ArgmaxPolicy(model=self.model, vocab=self.vocab),
-            seeds=[-(idx+1) for idx in range(get_rank(), self.num_eval_episodes_per_epoch, world_size())]
-        )
+        seeds = None
+        if self.num_eval_episodes_per_epoch is not None:
+            seeds = [-(idx+1) for idx in range(get_rank(), self.num_eval_episodes_per_epoch, world_size())]
+
+        rollouts = roller.run(policy=ArgmaxPolicy(model=self.model, vocab=self.vocab), seeds=seeds)
 
         compute_metrics(rollouts, tracker)
 

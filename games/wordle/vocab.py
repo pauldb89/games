@@ -1,3 +1,4 @@
+import functools
 import random
 
 
@@ -27,8 +28,12 @@ class Vocab:
         self.skip_mask = skip_mask
         self.mask_cache = {}
 
+    @functools.cached_property
+    def secret_options(self) -> list[str]:
+        return self.words[:self.max_secret_options]
+
     def pick_secret(self, seed: int) -> str:
-        return random.Random(seed).choice(self.words[:self.max_secret_options])
+        return random.Random(seed).choice(self.secret_options)
 
     def build_mask(self, prefix: str) -> list[int]:
         mask = [False] * 26
