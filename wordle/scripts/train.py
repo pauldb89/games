@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from common.distributed import distributed_cleanup, distributed_setup
-from common.wandb import wandb_config_update, wandb_init
+from wordle.distributed import distributed_cleanup, distributed_setup
+from wordle.wandb import wandb_config_update, wandb_init
 from wordle.model import MLP, AdvantageType, AlgoConfig, MLPConfig, ModelConfig, PolicyLossType, SamplingType, Transformer, TransformerConfig, TransformerConfig
 from wordle.reward import Reward
 from wordle.trainer import Trainer
