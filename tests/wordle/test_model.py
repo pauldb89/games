@@ -1,11 +1,11 @@
 import torch
-from wordle.model import Model, ModelConfig
+from wordle.model import Transformer, TransformerConfig
 from wordle.state import State
 
 
 def test_model() -> None:
-    model_config = ModelConfig(layers=1, heads=1, dim=4, share_weights=False)
-    model = Model(device=torch.device("cpu"), config=model_config)
+    model_config = TransformerConfig(layers=1, heads=1, dim=4, separate_encoder=False)
+    model = Transformer(device=torch.device("cpu"), config=model_config)
 
     states = [
         State(guesses=["hello", "wor"], hints=[[1, 0, 2, 0, 0]]),

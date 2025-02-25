@@ -8,13 +8,13 @@ from wordle.vocab import Vocab
 
 def test_reward() -> None:
     letters = ["r", "a", "i", "s", "e", "s", "o", "u", "l", "s", "b", "o", "n", "u", "s"]
-    vocab = Vocab(words=["bonus"])
-    env = Environment(vocab)
-    state = env.reset(seed=0)
+    vocab = Vocab(words=["bonus", "raise", "souls"])
+    env = Environment()
+    state = env.reset(secret="bonus")
 
     transitions = []
     for letter in letters:
-        action = Action(letter=letter, mask=[], lprobs=np.random.randn(26))
+        action = Action(letter=letter, mask=[], lprobs=np.random.randn(26), win_prob=0.5, value=0.123)
         next_state = env.step(action)
         transitions.append(Transition(source_state=state, target_state=next_state, action=action))
         state = next_state

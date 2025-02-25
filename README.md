@@ -25,7 +25,7 @@ pip install -r requirements.in
 Run tests:
 ```
 cd ~/code/games
-pytest tests/wordle
+PYTHONPATH=. pytest tests/wordle
 ```
 
 Launch trainer:

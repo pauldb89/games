@@ -12,8 +12,7 @@ import more_itertools
 import numpy as np
 import torch
 
-from common.distributed import get_rank, tqdm_once, world_size
-from wordle.distributed import print_once
+from wordle.distributed import get_rank, tqdm_once, world_size, print_once
 from wordle.wandb import wandb_log
 from wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
 from wordle.environment import BatchRoller, Rollout

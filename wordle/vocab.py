@@ -22,7 +22,7 @@ def get_letter(letter_id: int) -> str:
 
 
 class Vocab:
-    def __init__(self, words: list[str], max_secret_options: int | None, skip_mask: bool = False) -> None:
+    def __init__(self, words: list[str], max_secret_options: int | None = None, skip_mask: bool = False) -> None:
         self.words = words
         self.max_secret_options = max_secret_options
         self.skip_mask = skip_mask

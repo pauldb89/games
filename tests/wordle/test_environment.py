@@ -30,19 +30,18 @@ def test_environment():
         [EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH, EXACT_MATCH],
     ]
 
-    vocab = Vocab(words=["bonus"])
-    env = Environment(vocab)
-    state = env.reset(seed=0)
+    env = Environment()
+    state = env.reset(secret="bonus")
     assert state.guesses == []
     assert state.hints == []
     for idx, letter in enumerate(letters):
-        state = env.step(action=Action(letter=letter, mask=[], lprobs=np.random.randn(26)))
+        state = env.step(action=Action(letter=letter, mask=[], lprobs=np.random.randn(26), win_prob=0.5, value=0.123))
 
         assert state.guesses == make_guesses(letters[:idx+1])
         assert state.hints == hints[:(idx+1) // WORD_LENGTH]
 
 
-def test_roller():    
+def test_roller():
     letters = ["r", "a", "i", "s", "e", "s", "o", "u", "l", "s", "b", "o", "n", "u", "s"]
     hints = [
         [NO_MATCH, NO_MATCH, NO_MATCH, LETTER_MATCH, NO_MATCH],
