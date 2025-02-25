@@ -8,7 +8,7 @@ def wandb_init(*args: object, **kwargs: object) -> None:
 
 
 def wandb_finish() -> None:
-	if is_root_process():
+	if wandb.run is not None:
 		wandb.finish()
 
 

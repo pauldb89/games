@@ -1,4 +1,5 @@
 import collections
+import copy
 import time
 import hashlib
 import json
@@ -171,12 +172,13 @@ def gather_trackers(tracker: Tracker) -> Tracker:
     all_trackers = [None] * world_size()
     torch.distributed.all_gather_object(all_trackers, tracker)
 
+    agg_tracker = copy.deepcopy(tracker)
     for rank, gathered_tracker in enumerate(all_trackers):
         if rank != get_rank():
             for metric_name, values in gathered_tracker.metrics.items():
-                tracker.metrics[metric_name].extend(values)
+                agg_tracker.metrics[metric_name].extend(values)
 
-    return tracker
+    return agg_tracker
 
 
 class Trainer:
@@ -344,7 +346,9 @@ class Trainer:
 
         compute_metrics(rollouts, tracker)
 
-        metrics = {k: v for k, v in tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
+        agg_tracker = gather_trackers(tracker)
+
+        metrics = {k: v for k, v in agg_tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
         print_once(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
 
 
