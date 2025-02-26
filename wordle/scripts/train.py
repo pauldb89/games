@@ -14,7 +14,6 @@ from wordle.model import (
     MLPConfig,
     ModelConfig,
     PolicyLossType,
-    SamplingType,
     Transformer,
     TransformerConfig,
 )
@@ -34,10 +33,7 @@ def main() -> None:
         help="Checkpoint path",
     )
     parser.add_argument(
-        "--initial_checkpoint_path",
-        type=str,
-        default=None,
-        help="Initial checkpoint for model/optimizer"
+        "--initial_checkpoint_path", type=str, default=None, help="Initial checkpoint for model/optimizer"
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--epochs", type=int, default=10_000, help="Number of epochs")
@@ -88,9 +84,7 @@ def main() -> None:
     parser.add_argument("--value_loss_weight", type=float, default=0.05, help="Value loss weight")
     parser.add_argument("--entropy_loss_weight", type=float, default=0.03, help="Entropy loss weight")
     parser.add_argument("--win_loss_weight", type=float, default=0.05, help="Win loss weight")
-    parser.add_argument(
-        "--model_type", type=str, choices=["transformer", "mlp"], default="mlp", help="Model type"
-    )
+    parser.add_argument("--model_type", type=str, choices=["transformer", "mlp"], default="mlp", help="Model type")
     parser.add_argument("--dim", type=int, default=256, help="Hidden dimension")
     parser.add_argument("--layers", type=int, default=2, help="Number of layers")
     parser.add_argument("--heads", type=int, default=2, help="Number of heads")
@@ -98,21 +92,12 @@ def main() -> None:
         "--separate_encoder",
         default=False,
         action="store_true",
-        help="Do not share encoder params between policy and value function"
+        help="Do not share encoder params between policy and value function",
     )
     parser.add_argument("--skip_mask", default=False, action="store_true", help="Whether to skip masking when sampling")
-    parser.add_argument(
-        "--sampling_type",
-        type=str,
-        default="none",
-        choices=[e.value for e in SamplingType],
-        help="Logic for picking samples for computing loss"
-    )
-    parser.add_argument("--sampling_beta", type=float, default=1, help="Exponent for sampling weights")
     args = parser.parse_args()
 
     rank = distributed_setup()
-
 
     wandb_init(project="wordle", name=args.name, dir="/wandb")
     wandb_config_update(args)
@@ -188,8 +173,6 @@ def main() -> None:
             boostrap_values=args.bootstrap_values,
             policy_loss_type=PolicyLossType(args.policy_loss_type),
             ppo_clip_coeff=args.ppo_clip_coeff,
-            sampling_type=SamplingType(args.sampling_type),
-            sampling_beta=args.sampling_beta,
         ),
         return_discount=args.return_discount,
         gae_lambda=args.gae_lambda,

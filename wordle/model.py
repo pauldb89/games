@@ -39,8 +39,6 @@ class Sample:
     normalized_estimated_return: float = 0
     normalized_advantage: float = 0
 
-    importance_weight: float = 1
-
     secret: str = ""
 
 
@@ -94,20 +92,12 @@ class PolicyLossType(enum.StrEnum):
     PPO = "ppo"
 
 
-class SamplingType(enum.StrEnum):
-    NONE = "none"
-    ADVANTAGE = "advantage"
-    TD_ERROR = "td_error"
-
-
 class AlgoConfig(BaseModel):
     advantage_type: AdvantageType
     # Whether to boostrap the value function or to use monte carlo returns.
     boostrap_values: bool
     policy_loss_type: PolicyLossType
     ppo_clip_coeff: float
-    sampling_type: SamplingType
-    sampling_beta: float
 
 
 class Model(nn.Module):
@@ -130,7 +120,6 @@ class Model(nn.Module):
         wins = []
         policy_gradient_weights = []
         value_targets = []
-        importance_weights = []
         for sample in samples:
             states.append(sample.state)
             masks.append(sample.action.mask)
@@ -138,7 +127,6 @@ class Model(nn.Module):
             targets.append(letter_id)
             old_log_probs.append(sample.action.lprobs[letter_id])
             wins.append(sample.win)
-            importance_weights.append(sample.importance_weight)
 
             if algo_config.advantage_type == AdvantageType.MONTE_CARLO:
                 policy_gradient_weights.append(sample.normalized_long_term_return)
@@ -158,17 +146,15 @@ class Model(nn.Module):
         log_probs = torch.log_softmax(logits, dim=-1)
 
         policy_gradient_weights = torch.tensor(policy_gradient_weights, device=self.device, dtype=torch.float32)
-        importance_weights = torch.tensor(importance_weights, device=self.device, dtype=torch.float32)
         if algo_config.policy_loss_type == PolicyLossType.POLICY_GRADIENT:
             target_log_probs = log_probs[range(len(samples)), targets]
-            policy_loss = -(policy_gradient_weights / importance_weights * target_log_probs).mean()
+            policy_loss = -(policy_gradient_weights * target_log_probs).mean()
         elif algo_config.policy_loss_type == PolicyLossType.PPO:
             new_log_probs = log_probs[range(len(samples)), targets]
             old_log_probs = torch.tensor(old_log_probs, device=self.device, dtype=torch.float32)
             ratio = (new_log_probs - old_log_probs).exp()
             clipped_ratio = torch.clip(ratio, 1 - algo_config.ppo_clip_coeff, 1 + algo_config.ppo_clip_coeff)
-            policy_loss_terms = -torch.min(policy_gradient_weights * ratio, policy_gradient_weights * clipped_ratio)
-            policy_loss = (policy_loss_terms / importance_weights).mean()
+            policy_loss = -torch.min(policy_gradient_weights * ratio, policy_gradient_weights * clipped_ratio).mean()
         else:
             raise ValueError(f"Policy loss type {algo_config.policy_loss_type} not supported")
 
@@ -184,23 +170,6 @@ class Model(nn.Module):
         win_loss = F.binary_cross_entropy(win_probs, wins)
 
         return policy_loss, value_loss, entropy_loss, win_loss
-
-    def supervised_loss(self, samples: list[Sample]) -> torch.Tensor:
-        states = []
-        masks = []
-        targets = []
-        weights = []
-        for sample in samples:
-            states.append(sample.state)
-            masks.append(sample.action.mask)
-            targets.append(letter_index(sample.action.letter))
-            weights.append(sample.reward)
-
-        logits = self.compute_logits(states, masks)
-        targets = torch.tensor(targets, device=self.device)
-        weights = torch.tensor(weights, device=self.device)
-        losses = F.cross_entropy(logits, targets, reduction="none")
-        return (losses * weights).mean()
 
 
 class Transformer(Model):

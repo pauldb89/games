@@ -1,7 +1,6 @@
 import collections
 import copy
 import json
-import math
 import os
 import random
 from typing import Any
@@ -146,22 +145,8 @@ def compute_reward_metrics(samples: list[Sample], tracker: Tracker) -> None:
     tracker.log_value("explained_variance", 1 - np.var(values - value_targets) / (np.var(value_targets) + 1e-8))
 
 
-def batch_samples(samples: list[Sample], algo_config: AlgoConfig, updates_per_epoch: int) -> list[list[Sample]]:
-    if algo_config.sampling_type == "none":
-        return [list(batch) for batch in more_itertools.divide(updates_per_epoch, samples)]
-
-    batch_size = len(samples) // updates_per_epoch
-    weights = []
-    for s in samples:
-        if algo_config.sampling_type == "advantage":
-            s.importance_weight = math.exp(s.advantage) ** algo_config.sampling_beta
-        elif algo_config.sampling_type == "td_error":
-            s.importance_weight = abs(s.td_error) ** algo_config.sampling_beta
-        else:
-            raise ValueError(f"Unknown sampling strategy {algo_config.sampling_type}")
-        weights.append(s.importance_weight)
-
-    return [random.choices(samples, weights=weights, k=batch_size) for _ in range(updates_per_epoch)]
+def batch_samples(samples: list[Sample], updates_per_epoch: int) -> list[list[Sample]]:
+    return [list(batch) for batch in more_itertools.divide(updates_per_epoch, samples)]
 
 
 def gather_trackers(tracker: Tracker) -> Tracker:
@@ -284,7 +269,7 @@ class Trainer:
         tracker.log_value("num_samples", len(samples))
 
         num_batches = 0
-        for batch in tqdm_once(batch_samples(samples, self.algo_config, self.updates_per_epoch), desc="Train step"):
+        for batch in tqdm_once(batch_samples(samples, self.updates_per_epoch), desc="Train step"):
             num_batches += 1
             batch_weight = len(batch) / len(samples)
 
