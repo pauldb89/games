@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
+
 from ticket2ride.card import Card
 from ticket2ride.color import ANY, COLORS
 from ticket2ride.consts import NUM_ANY_CARDS, NUM_COLOR_CARDS

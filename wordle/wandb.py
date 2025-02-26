@@ -2,6 +2,7 @@ import wandb
 
 from wordle.distributed import is_root_process
 
+
 def wandb_init(*args: object, **kwargs: object) -> None:
 	if is_root_process():
 		wandb.init(*args, **kwargs)

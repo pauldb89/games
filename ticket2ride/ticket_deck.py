@@ -1,5 +1,6 @@
 import copy
 import random
+
 from ticket2ride.ticket import TICKETS, DrawnTickets, Ticket
 
 

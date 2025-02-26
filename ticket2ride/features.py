@@ -3,12 +3,10 @@ import enum
 from dataclasses import dataclass
 from typing import Iterable
 
+from ticket2ride.actions import ActionType
 from ticket2ride.city import CITIES
 from ticket2ride.color import EXTENDED_COLORS
-from ticket2ride.consts import MAX_PLAYERS
-from ticket2ride.consts import NUM_ANY_CARDS
-from ticket2ride.consts import NUM_VISIBLE_CARDS
-from ticket2ride.actions import ActionType
+from ticket2ride.consts import MAX_PLAYERS, NUM_ANY_CARDS, NUM_VISIBLE_CARDS
 from ticket2ride.route import ROUTES
 from ticket2ride.state import ObservedState
 from ticket2ride.ticket import TICKETS, Ticket

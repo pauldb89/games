@@ -5,14 +5,20 @@ from typing import Protocol
 
 import torch
 
-from ticket2ride.action_utils import create_build_route_action
-from ticket2ride.action_utils import create_build_route_mask
-from ticket2ride.action_utils import create_draw_card_action
-from ticket2ride.action_utils import create_draw_card_mask
-from ticket2ride.action_utils import create_draw_tickets_action
-from ticket2ride.action_utils import create_draw_tickets_mask
-from ticket2ride.action_utils import create_plan_action
-from ticket2ride.action_utils import create_valid_actions_mask
+from ticket2ride.action_utils import (
+    create_build_route_action,
+    create_build_route_mask,
+    create_draw_card_action,
+    create_draw_card_mask,
+    create_draw_tickets_action,
+    create_draw_tickets_mask,
+    create_plan_action,
+    create_valid_actions_mask,
+    get_build_route_options,
+    get_draw_card_options,
+    get_ticket_draw_options,
+    get_valid_actions,
+)
 from ticket2ride.actions import (
     Action,
     ActionType,
@@ -20,14 +26,8 @@ from ticket2ride.actions import (
     DrawCard,
     DrawTickets,
     Plan,
+    Prediction,
 )
-from ticket2ride.action_utils import (
-    get_build_route_options,
-    get_draw_card_options,
-    get_ticket_draw_options,
-    get_valid_actions,
-)
-from ticket2ride.actions import Prediction
 from ticket2ride.model import Model
 from ticket2ride.render_utils import print_state, read_option
 from ticket2ride.state import ObservedState

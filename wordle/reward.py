@@ -1,7 +1,5 @@
+from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH
 from wordle.environment import Transition
-from wordle.consts import EXACT_MATCH
-from wordle.consts import LETTER_MATCH
-from wordle.consts import NO_MATCH
 
 
 class Reward:

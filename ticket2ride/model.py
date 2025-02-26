@@ -3,14 +3,23 @@ import math
 from dataclasses import dataclass
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-from ticket2ride.action_utils import PLAN_CLASSES, DRAW_CARD_CLASSES, \
-    CHOOSE_TICKETS_CLASSES, BUILD_ROUTE_CLASSES
-from ticket2ride.actions import ActionType, Action
-from ticket2ride.features import FEATURE_REGISTRY, FeatureType, \
-    Extractor, Features, BatchFeatures
+from ticket2ride.action_utils import (
+    BUILD_ROUTE_CLASSES,
+    CHOOSE_TICKETS_CLASSES,
+    DRAW_CARD_CLASSES,
+    PLAN_CLASSES,
+)
+from ticket2ride.actions import Action, ActionType
+from ticket2ride.features import (
+    FEATURE_REGISTRY,
+    BatchFeatures,
+    Extractor,
+    Features,
+    FeatureType,
+)
 from ticket2ride.state import ObservedState, Score
 
 

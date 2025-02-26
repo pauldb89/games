@@ -4,7 +4,11 @@ from ticket2ride import consts
 from ticket2ride.card import Card
 from ticket2ride.card_deck import CardDeck
 from ticket2ride.color import ANY
-from ticket2ride.consts import MAX_VISIBLE_ANY_CARDS, NUM_INITIAL_TRAIN_CARS, NUM_VISIBLE_CARDS
+from ticket2ride.consts import (
+    MAX_VISIBLE_ANY_CARDS,
+    NUM_INITIAL_TRAIN_CARS,
+    NUM_VISIBLE_CARDS,
+)
 from ticket2ride.route_info import RouteInfo
 from ticket2ride.ticket_deck import TicketDeck
 

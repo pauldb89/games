@@ -1,19 +1,13 @@
 import abc
 import copy
-import functools
-import random
 from dataclasses import dataclass
 from typing import Any
 
-from wordle.consts import EXACT_MATCH
-from wordle.consts import LETTER_MATCH
-from wordle.consts import NO_MATCH
-from wordle.consts import WORD_LENGTH
+from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH, WORD_LENGTH
 from wordle.model import amp_context
 from wordle.policy import Policy
 from wordle.state import Action, State
 from wordle.vocab import Vocab
-
 
 
 def compute_hint(secret: str, guess: str) -> list[int]:
@@ -25,7 +19,6 @@ def compute_hint(secret: str, guess: str) -> list[int]:
         else:
             hint.append(NO_MATCH)
 
-
     for secret_letter, guessed_letter in zip(secret, guess):
         if secret_letter == guessed_letter:
             continue
@@ -33,6 +26,7 @@ def compute_hint(secret: str, guess: str) -> list[int]:
         for guess_idx, other_letter in enumerate(guess):
             if hint[guess_idx] == NO_MATCH and secret_letter == other_letter:
                 hint[guess_idx] = LETTER_MATCH
+
                 break
 
     return hint
@@ -99,11 +93,9 @@ class Rollout:
         return self.key == other.key
 
 
-
 class Roller(abc.ABC):
     @abc.abstractmethod
-    def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]:
-        ...
+    def run(self, policy: Policy, seeds: list[int]) -> list[Rollout]: ...
 
 
 class BatchRoller(Roller):

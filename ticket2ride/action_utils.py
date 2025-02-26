@@ -1,11 +1,13 @@
 import itertools
 
-from ticket2ride.actions import ActionType
-from ticket2ride.actions import BuildRoute
-from ticket2ride.actions import DrawCard
-from ticket2ride.actions import DrawTickets
-from ticket2ride.actions import Plan
-from ticket2ride.actions import Prediction
+from ticket2ride.actions import (
+    ActionType,
+    BuildRoute,
+    DrawCard,
+    DrawTickets,
+    Plan,
+    Prediction,
+)
 from ticket2ride.board import Board
 from ticket2ride.card import Card
 from ticket2ride.color import ANY, COLORS, EXTENDED_COLORS, Color

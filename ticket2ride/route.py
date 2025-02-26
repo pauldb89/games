@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from ticket2ride.city import (
-    City,
     ATLANTA,
     BOSTON,
     CALGARY,
@@ -38,9 +37,9 @@ from ticket2ride.city import (
     VANCOUVER,
     WASHINGTON,
     WINNIPEG,
+    City,
 )
 from ticket2ride.color import (
-    Color,
     ANY,
     BLACK,
     BLUE,
@@ -50,8 +49,8 @@ from ticket2ride.color import (
     RED,
     WHITE,
     YELLOW,
+    Color,
 )
-
 
 ROUTE_LENGTHS_TO_VALUES: dict[int, int] = {
     1: 1,

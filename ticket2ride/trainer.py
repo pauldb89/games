@@ -1,5 +1,4 @@
 import collections
-import copy
 import hashlib
 import json
 import os
@@ -9,16 +8,18 @@ import numpy as np
 import torch
 import tqdm
 import wandb
-
 from torch.cuda.amp import GradScaler
 
-from ticket2ride.actions import ActionType, Action, DrawCard
+from ticket2ride.actions import Action, ActionType, DrawCard
 from ticket2ride.color import ANY
 from ticket2ride.environment import BatchRoller
 from ticket2ride.model import Model, Sample
-from ticket2ride.policies import UniformRandomPolicy, ArgmaxModelPolicy, StochasticModelPolicy
-from ticket2ride.state import PlayerScore
-from ticket2ride.state import Transition
+from ticket2ride.policies import (
+    ArgmaxModelPolicy,
+    StochasticModelPolicy,
+    UniformRandomPolicy,
+)
+from ticket2ride.state import PlayerScore, Transition
 from ticket2ride.tracker import Tracker
 
 
@@ -118,7 +119,7 @@ def track_score_stats(tracker: Tracker, score: PlayerScore) -> None:
         num_routes = score.owned_routes_by_length[length]
         tracker.log_value(f"completed_routes_len_{length}", num_routes)
         for _ in range(num_routes):
-            tracker.log_value(f"completed_routes_length", length)
+            tracker.log_value("completed_routes_length", length)
 
 
 def tensor_hash(t: torch.Tensor) -> str:

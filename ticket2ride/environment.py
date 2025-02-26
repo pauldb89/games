@@ -1,8 +1,5 @@
 import collections
 import random
-from dataclasses import dataclass
-
-from termcolor import colored
 
 from ticket2ride.action_utils import get_draw_card_options
 from ticket2ride.actions import (
@@ -11,28 +8,22 @@ from ticket2ride.actions import (
     BuildRoute,
     DrawCard,
     DrawTickets,
-    Plan
+    Plan,
 )
 from ticket2ride.board import Board
 from ticket2ride.card import Card
-from ticket2ride.color import ANY, Color, COLORS
+from ticket2ride.color import ANY, COLORS, Color
 from ticket2ride.consts import (
-    MAX_PLAYERS,
-    MIN_PLAYERS,
+    NUM_ANY_CARDS,
+    NUM_COLOR_CARDS,
     NUM_INITIAL_PLAYER_CARDS,
-    NUM_LAST_TURN_CARS, NUM_COLOR_CARDS, NUM_ANY_CARDS,
+    NUM_LAST_TURN_CARS,
 )
 from ticket2ride.longest_path import find_longest_path
-from ticket2ride.model import Sample
 from ticket2ride.player import Player
 from ticket2ride.policies import Policy
 from ticket2ride.route import ROUTES, Route
-from ticket2ride.state import (
-    ObservedState,
-    PlayerScore,
-    Score,
-    Transition
-)
+from ticket2ride.state import ObservedState, PlayerScore, Score, Transition
 from ticket2ride.ticket import DrawnTickets
 from ticket2ride.tracker import Tracker
 

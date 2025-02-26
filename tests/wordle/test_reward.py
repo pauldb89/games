@@ -1,14 +1,12 @@
 import numpy as np
-from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH
+
 from wordle.environment import Environment, Transition
 from wordle.reward import Reward
 from wordle.state import Action
-from wordle.vocab import Vocab
 
 
 def test_reward() -> None:
     letters = ["r", "a", "i", "s", "e", "s", "o", "u", "l", "s", "b", "o", "n", "u", "s"]
-    vocab = Vocab(words=["bonus", "raise", "souls"])
     env = Environment()
     state = env.reset(secret="bonus")
 

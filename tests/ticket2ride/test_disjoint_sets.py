@@ -1,5 +1,5 @@
+from ticket2ride.city import DENVER, HELENA, LOS_ANGELES, PHOENIX, SEATTLE
 from ticket2ride.disjoint_sets import DisjointSets
-from ticket2ride.city import SEATTLE, HELENA, LOS_ANGELES, PHOENIX, DENVER
 
 
 def test_disjoint_sets() -> None:

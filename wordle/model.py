@@ -1,15 +1,16 @@
 import abc
 import collections
 import contextlib
-from dataclasses import dataclass
 import enum
 import math
+from dataclasses import dataclass
 from typing import Literal, Union
+
 import numpy as np
-from pydantic import BaseModel, TypeAdapter
-from torch import nn
 import torch
 import torch.nn.functional as F
+from pydantic import BaseModel, TypeAdapter
+from torch import nn
 
 from wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, WORD_LENGTH
 from wordle.state import Action, State
@@ -57,7 +58,7 @@ class PositionEncodings(nn.Module):
         self.register_buffer("embeddings", embeddings.unsqueeze(dim=0))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x + self.embeddings[:, :x.size(1), :]
+        return x + self.embeddings[:, : x.size(1), :]
 
 
 class BaseConfig(BaseModel):
@@ -115,8 +116,7 @@ class Model(nn.Module):
         super().to(device)
 
     @abc.abstractmethod
-    def compute_logits(self, states: list[State], head_masks: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
-        ...
+    def compute_logits(self, states: list[State], head_masks: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     def forward(
         self,
@@ -234,10 +234,7 @@ class Transformer(Model):
         else:
             self.encoder = make_encoder()
 
-        self.action_head = nn.Sequential(
-            nn.LayerNorm(config.dim),
-            nn.Linear(config.dim, 26, bias=False)
-        )
+        self.action_head = nn.Sequential(nn.LayerNorm(config.dim), nn.Linear(config.dim, 26, bias=False))
         self.value_head = nn.Sequential(nn.LayerNorm(config.dim), nn.Linear(config.dim, 1))
         self.win_head = nn.Sequential(nn.LayerNorm(config.dim), nn.Linear(config.dim, 1))
 
@@ -246,7 +243,7 @@ class Transformer(Model):
     def embed(self, states: list[State]) -> list[torch.Tensor]:
         seqs = []
         for state in states:
-            letters = [letter_index(l) for guess in state.guesses for l in guess]
+            letters = [letter_index(letter) for guess in state.guesses for letter in guess]
             hints = [feedback for hint in state.hints for feedback in hint]
 
             letter_seq = self.letter_embeddings(torch.tensor(letters, device=self.device, dtype=torch.int64))
@@ -259,12 +256,11 @@ class Transformer(Model):
             seq[0] = self.start_token
             seq[idx * 2 + 1] = letter_seq[idx]
             seq[idx * 2 + 2] = hint_seq
-            seq[2 * len(hints)+1:] = letter_seq[len(hints):]
+            seq[2 * len(hints) + 1 :] = letter_seq[len(hints) :]
 
             seqs.append(seq)
 
         return seqs
-
 
     def pad(self, seqs: list[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         x = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True, padding_value=0)
@@ -275,15 +271,13 @@ class Transformer(Model):
         return x, mask
 
     def compute_logits(
-        self,
-        states: list[State],
-        head_masks: list[list[int]]
+        self, states: list[State], head_masks: list[list[int]]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         seqs = self.embed(states)
 
         features, attn_key_mask = self.pad(seqs)
 
-        features = self.positional_encodings(x)
+        features = self.positional_encodings(features)
 
         if self.config.separate_encoder:
             x = self.policy_encoder(features, src_key_padding_mask=attn_key_mask)
@@ -316,7 +310,7 @@ class MLP(Model):
                 nn.LayerNorm(config.dim),
                 nn.ReLU(),
             )
-            for _ in range(config.layers-1):
+            for _ in range(config.layers - 1):
                 layers.append(nn.Linear(config.dim, config.dim))
                 layers.append(nn.LayerNorm(config.dim))
                 layers.append(nn.ReLU())
@@ -342,7 +336,7 @@ class MLP(Model):
 
         def get_slice(letter_index: int, position: int) -> slice:
             offset = 27 + letter_index * WORD_LENGTH * 3 + position * 3
-            return slice(offset, offset+3)
+            return slice(offset, offset + 3)
 
         batch_features = []
         for state in states:
@@ -364,11 +358,8 @@ class MLP(Model):
 
         return np.array(batch_features)
 
-
     def compute_logits(
-        self,
-        states: list[State],
-        head_masks: list[list[int]]
+        self, states: list[State], head_masks: list[list[int]]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         features = torch.tensor(self.encode(states), device=self.device)
 

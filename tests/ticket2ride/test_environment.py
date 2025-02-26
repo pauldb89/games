@@ -5,7 +5,7 @@ import torch
 from ticket2ride.environment import BatchRoller
 from ticket2ride.features import DYNAMIC_EXTRACTORS
 from ticket2ride.model import Model
-from ticket2ride.policies import UniformRandomPolicy, ArgmaxModelPolicy
+from ticket2ride.policies import ArgmaxModelPolicy, UniformRandomPolicy
 from ticket2ride.tracker import Tracker
 
 

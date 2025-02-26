@@ -1,4 +1,5 @@
 from collections import defaultdict
+
 from ticket2ride.color import Color
 from ticket2ride.disjoint_sets import DisjointSets
 from ticket2ride.route import Route

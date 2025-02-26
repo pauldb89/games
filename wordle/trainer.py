@@ -1,7 +1,5 @@
 import collections
 import copy
-import time
-import hashlib
 import json
 import math
 import os
@@ -12,16 +10,15 @@ import more_itertools
 import numpy as np
 import torch
 
-from wordle.distributed import get_rank, tqdm_once, world_size, print_once
-from wordle.wandb import wandb_log
 from wordle.consts import AMP_ENABLED, EXACT_MATCH, LETTER_MATCH, MAX_GUESSES
+from wordle.distributed import get_rank, print_once, tqdm_once, world_size
 from wordle.environment import BatchRoller, Rollout
-from wordle.model import AlgoConfig, Sample, amp_context
-from wordle.model import Model
+from wordle.model import AlgoConfig, Model, Sample, amp_context
+from wordle.policy import ArgmaxPolicy, StochasticPolicy
 from wordle.reward import Reward
 from wordle.tracker import Tracker
-from wordle.policy import ArgmaxPolicy, StochasticPolicy
 from wordle.vocab import Vocab
+from wordle.wandb import wandb_log
 
 
 def compute_returns(episode_samples: list[Sample], return_discount: float, gae_lambda: float) -> list[Sample]:
@@ -120,7 +117,7 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
         tracker.log_value("good_follow_up_ratio", good_follow_ups / follow_ups if follow_ups else 0)
         tracker.log_value(
             "good_follow_up_ratio_last_turn",
-            good_follow_ups_last_turn / follow_ups_last_turn if follow_ups_last_turn else 0
+            good_follow_ups_last_turn / follow_ups_last_turn if follow_ups_last_turn else 0,
         )
 
         tracker.log_value("repeated_guesses", len(end_state.guesses) - len(set(end_state.guesses)))
@@ -129,7 +126,7 @@ def compute_metrics(rollouts: list[Rollout], tracker: Tracker) -> None:
 
         if end_state.win:
             tracker.log_value("turns_to_win", len(end_state.hints))
-            for num_turns in range(1, MAX_GUESSES+1):
+            for num_turns in range(1, MAX_GUESSES + 1):
                 tracker.log_value(f"wins_in_{num_turns}_turns", len(end_state.hints) == num_turns)
 
     tracker.log_value("repeated_initial_guesses", len(rollouts) - len(initial_guesses))
@@ -265,7 +262,7 @@ class Trainer:
                         action=transition.action,
                         reward=reward,
                         win=int(end_state.win),
-                        secret=rollout.secret
+                        secret=rollout.secret,
                     )
                 )
 
@@ -279,7 +276,6 @@ class Trainer:
         samples = normalize_returns(samples)
         compute_reward_metrics(samples, tracker)
         return samples
-
 
     def train(self, samples: list[Any], tracker: Tracker) -> None:
         self.model.train()
@@ -332,7 +328,6 @@ class Trainer:
 
         tracker.log_value("num_batches", num_batches)
 
-
     @torch.no_grad
     def evaluate(self, tracker: Tracker, epoch_id: int) -> None:
         self.model.eval()
@@ -340,7 +335,7 @@ class Trainer:
         roller = BatchRoller(self.vocab)
         seeds = None
         if self.num_eval_episodes_per_epoch is not None:
-            seeds = [-(idx+1) for idx in range(get_rank(), self.num_eval_episodes_per_epoch, world_size())]
+            seeds = [-(idx + 1) for idx in range(get_rank(), self.num_eval_episodes_per_epoch, world_size())]
 
         rollouts = roller.run(policy=ArgmaxPolicy(model=self.model, vocab=self.vocab), seeds=seeds)
 
@@ -350,7 +345,6 @@ class Trainer:
 
         metrics = {k: v for k, v in agg_tracker.report().items() if k.startswith("eval") and k.endswith("mean")}
         print_once(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
-
 
     def run(self) -> None:
         for epoch_id in range(self.epochs):
@@ -380,7 +374,6 @@ class Trainer:
                 f"Epoch: {epoch_id}, Loss: {metrics['train/loss_sum']}, "
                 f"Win rate: {100 * metrics['collect_samples/wins_mean']:.2f}%, "
                 f"Total time: {metrics['t_overall_mean']} seconds"
-
             )
             wandb_log(metrics, step=epoch_id)
 

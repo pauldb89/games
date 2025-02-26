@@ -2,12 +2,11 @@ import os.path
 import random
 from argparse import ArgumentParser
 
-import wandb
 import numpy as np
 import torch
+import wandb
 
-from ticket2ride.features import DYNAMIC_EXTRACTORS
-from ticket2ride.features import STATIC_EXTRACTORS
+from ticket2ride.features import DYNAMIC_EXTRACTORS, STATIC_EXTRACTORS
 from ticket2ride.model import Model
 from ticket2ride.trainer import PolicyGradientTrainer, Reward
 

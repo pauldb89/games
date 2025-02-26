@@ -3,13 +3,13 @@ from typing import Callable, Protocol, Self
 
 import pytest
 
-from ticket2ride.actions import ActionType
 from ticket2ride.action_utils import (
     get_build_route_options,
     get_draw_card_options,
     get_ticket_draw_options,
     get_valid_actions,
 )
+from ticket2ride.actions import ActionType
 from ticket2ride.board import Board
 from ticket2ride.card import Card
 from ticket2ride.color import ANY, BLACK, BLUE, RED, WHITE

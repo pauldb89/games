@@ -1,4 +1,5 @@
 import torch
+
 from wordle.model import Transformer, TransformerConfig
 from wordle.state import State
 

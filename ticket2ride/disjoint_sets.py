@@ -1,4 +1,4 @@
-from ticket2ride.city import City, CITIES
+from ticket2ride.city import CITIES, City
 
 
 class DisjointSets:

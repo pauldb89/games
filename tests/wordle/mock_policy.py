@@ -1,6 +1,7 @@
 import numpy as np
-from wordle.state import Action, State
+
 from wordle.policy import Policy
+from wordle.state import Action, State
 
 
 class MockPolicy(Policy):

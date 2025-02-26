@@ -1,10 +1,10 @@
 import collections
 from collections import defaultdict
 from dataclasses import asdict
+from typing import TypeVar
 
 from tabulate import tabulate
 from termcolor import colored
-from typing import TypeVar
 
 from ticket2ride.board import Board
 from ticket2ride.card import render_cards

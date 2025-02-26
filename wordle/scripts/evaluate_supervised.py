@@ -1,7 +1,7 @@
-from argparse import ArgumentParser
-from dataclasses import dataclass
 import os
 import random
+from argparse import ArgumentParser
+from dataclasses import dataclass
 
 import numpy as np
 import torch

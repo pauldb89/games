@@ -1,6 +1,6 @@
 import numpy as np
+
 from tests.wordle.mock_policy import MockPolicy
-from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH
 from wordle.environment import BatchRoller
 from wordle.model import Sample
 from wordle.reward import Reward

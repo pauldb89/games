@@ -1,6 +1,5 @@
-from argparse import ArgumentParser
 import itertools
-import os
+from argparse import ArgumentParser
 
 from wordle.consts import WORD_LENGTH
 from wordle.vocab import Vocab

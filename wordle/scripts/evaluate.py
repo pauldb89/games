@@ -1,7 +1,7 @@
-from argparse import ArgumentParser
 import json
 import os
 import random
+from argparse import ArgumentParser
 
 import numpy as np
 import torch

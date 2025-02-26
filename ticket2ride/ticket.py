@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 
 from ticket2ride.city import (
-    SALT_LAKE_CITY,
-    City,
     ATLANTA,
     BOSTON,
     CALGARY,
@@ -25,14 +23,17 @@ from ticket2ride.city import (
     PHOENIX,
     PITTSBURGH,
     PORTLAND,
+    SALT_LAKE_CITY,
+    SAN_FRANCISCO,
     SANTA_FE,
     SAULT_ST_MARIE,
     SEATTLE,
-    SAN_FRANCISCO,
     TORONTO,
     VANCOUVER,
     WINNIPEG,
+    City,
 )
+
 
 @dataclass(frozen=True, order=True)
 class Ticket:

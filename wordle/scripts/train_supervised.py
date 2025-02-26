@@ -1,17 +1,16 @@
-from argparse import ArgumentParser
 import collections
-from dataclasses import dataclass
 import json
 import os
 import random
+from argparse import ArgumentParser
 
 import numpy as np
 import torch
 import wandb
 
 from ticket2ride.tracker import Tracker
-from wordle.consts import EXACT_MATCH, LETTER_MATCH, MAX_GUESSES, NO_MATCH, WORD_LENGTH
-from wordle.environment import BatchRoller, Environment, compute_hint
+from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH, WORD_LENGTH
+from wordle.environment import BatchRoller, Environment
 from wordle.model import Model, ModelConfig, Sample, amp_context
 from wordle.policy import ArgmaxPolicy, StochasticPolicy
 from wordle.state import Action, State

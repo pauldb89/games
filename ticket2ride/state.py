@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Self
 
-from ticket2ride.actions import ActionType, Action
+from ticket2ride.actions import Action, ActionType
 from ticket2ride.board import Board
 from ticket2ride.consts import LONGEST_PATH_POINTS
 from ticket2ride.player import Player

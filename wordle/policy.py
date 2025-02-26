@@ -1,6 +1,7 @@
 import abc
+
 import torch
-import torch.nn.functional as F
+
 from wordle.consts import WORD_LENGTH
 from wordle.model import Model
 from wordle.state import Action, State

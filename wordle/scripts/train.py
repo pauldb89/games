@@ -1,18 +1,27 @@
 import os
-from argparse import ArgumentParser, Namespace
 import random
+from argparse import ArgumentParser
 
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from wordle.distributed import distributed_cleanup, distributed_setup
-from wordle.wandb import wandb_config_update, wandb_init
-from wordle.model import MLP, AdvantageType, AlgoConfig, MLPConfig, ModelConfig, PolicyLossType, SamplingType, Transformer, TransformerConfig, TransformerConfig
+from wordle.model import (
+    MLP,
+    AdvantageType,
+    AlgoConfig,
+    MLPConfig,
+    ModelConfig,
+    PolicyLossType,
+    SamplingType,
+    Transformer,
+    TransformerConfig,
+)
 from wordle.reward import Reward
 from wordle.trainer import Trainer
 from wordle.vocab import Vocab, load_words
-from wordle.wandb import wandb_finish
+from wordle.wandb import wandb_config_update, wandb_finish, wandb_init
 
 
 def main() -> None:

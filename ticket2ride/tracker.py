@@ -1,7 +1,7 @@
 import collections
 import contextlib
 import time
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from typing import Generator
 
 import numpy as np

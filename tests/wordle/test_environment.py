@@ -1,13 +1,11 @@
 
 import more_itertools
 import numpy as np
+
 from tests.wordle.mock_policy import MockPolicy
-from wordle.consts import EXACT_MATCH
-from wordle.consts import LETTER_MATCH
-from wordle.consts import NO_MATCH
-from wordle.consts import WORD_LENGTH
+from wordle.consts import EXACT_MATCH, LETTER_MATCH, NO_MATCH, WORD_LENGTH
 from wordle.environment import BatchRoller, Environment, compute_hint
-from wordle.state import Action, State
+from wordle.state import Action
 from wordle.vocab import Vocab
 
 
