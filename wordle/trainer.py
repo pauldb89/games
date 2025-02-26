@@ -183,6 +183,7 @@ class Trainer:
         value_loss_weight: float,
         entropy_loss_weight: float,
         win_loss_weight: float,
+        start_epoch: int,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -202,6 +203,7 @@ class Trainer:
         self.value_loss_weight = value_loss_weight
         self.entropy_loss_weight = entropy_loss_weight
         self.win_loss_weight = win_loss_weight
+        self.start_epoch = start_epoch
         self.scaler = torch.GradScaler(init_scale=2**16)
 
     def checkpoint(self, epoch_id: int) -> None:
@@ -332,7 +334,7 @@ class Trainer:
         print_once(f"Evaluation step {epoch_id}: {json.dumps(metrics, indent=2)}")
 
     def run(self) -> None:
-        for epoch_id in range(self.epochs):
+        for epoch_id in range(self.start_epoch, self.epochs):
             tracker = Tracker()
             with tracker.timer("t_overall"):
                 if epoch_id % self.checkpoint_every_n_epochs == 0:

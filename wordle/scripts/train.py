@@ -179,7 +179,9 @@ def main() -> None:
         value_loss_weight=args.value_loss_weight,
         entropy_loss_weight=args.entropy_loss_weight,
         win_loss_weight=args.win_loss_weight,
+        start_epoch=int(args.initial_checkpoint_path.rstrip("/").split("/")[-1]) if args.initial_checkpoint_path else 0,
     )
+
     trainer.run()
 
     wandb_finish()
