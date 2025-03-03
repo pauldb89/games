@@ -239,6 +239,8 @@ class Trainer:
         samples = []
         for rollout in rollouts:
             rewards = self.reward_fn(rollout.transitions)
+            episode_reward = sum(rewards)
+            tracker.log_value("episode_reward", episode_reward)
             end_state = rollout.transitions[-1].target_state
 
             episode_samples = []
